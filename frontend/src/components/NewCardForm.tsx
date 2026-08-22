@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useI18n } from "@/lib/i18n";
 
 const initialFormState = { title: "", details: "" };
 
@@ -7,6 +8,7 @@ type NewCardFormProps = {
 };
 
 export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [formState, setFormState] = useState(initialFormState);
 
@@ -29,7 +31,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
             onChange={(event) =>
               setFormState((prev) => ({ ...prev, title: event.target.value }))
             }
-            placeholder="Card title"
+            placeholder={t("cardTitle")}
             className="w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm font-medium text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
             required
           />
@@ -38,7 +40,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
             onChange={(event) =>
               setFormState((prev) => ({ ...prev, details: event.target.value }))
             }
-            placeholder="Details"
+            placeholder={t("details")}
             rows={3}
             className="w-full resize-none rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--gray-text)] outline-none transition focus:border-[var(--primary-blue)]"
           />
@@ -47,7 +49,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
               type="submit"
               className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
             >
-              Add card
+              {t("addCard")}
             </button>
             <button
               type="button"
@@ -57,7 +59,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
               }}
               className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
             >
-              Cancel
+              {t("cancel")}
             </button>
           </div>
         </form>
@@ -67,7 +69,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
           onClick={() => setIsOpen(true)}
           className="w-full rounded-full border border-dashed border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)]"
         >
-          Add a card
+          {t("addCard")}
         </button>
       )}
     </div>

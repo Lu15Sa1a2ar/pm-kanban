@@ -32,12 +32,14 @@ describe("KanbanBoard", () => {
     const detailsInput = within(column).getByPlaceholderText(/details/i);
     await userEvent.type(detailsInput, "Notes");
 
-    await userEvent.click(within(column).getByRole("button", { name: /add card/i }));
+    await userEvent.click(
+      within(column).getByRole("button", { name: /add( a)? card/i })
+    );
 
     expect(within(column).getByText("New card")).toBeInTheDocument();
 
     const deleteButton = within(column).getByRole("button", {
-      name: /delete new card/i,
+      name: /remove new card/i,
     });
     await userEvent.click(deleteButton);
 

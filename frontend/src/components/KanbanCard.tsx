@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import type { Card } from "@/lib/kanban";
+import { useI18n } from "@/lib/i18n";
 
 type KanbanCardProps = {
   card: Card;
@@ -9,6 +10,7 @@ type KanbanCardProps = {
 };
 
 export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
+  const { t } = useI18n();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
 
@@ -43,9 +45,9 @@ export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
           type="button"
           onClick={() => onDelete(card.id)}
           className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
-          aria-label={`Delete ${card.title}`}
+          aria-label={`${t("remove")} ${card.title}`}
         >
-          Remove
+          {t("remove")}
         </button>
       </div>
     </article>

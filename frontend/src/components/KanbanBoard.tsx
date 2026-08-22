@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -13,11 +13,24 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { getBoard, saveBoard } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
-export const KanbanBoard = () => {
+export const KanbanBoard = ({
+  onLogout = () => undefined,
+  remote = false,
+}: {
+  onLogout?: () => void | Promise<void>;
+  remote?: boolean;
+}) => {
   const [board, setBoard] = useState<BoardData>(() => initialData);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(remote);
+  const [saveError, setSaveError] = useState("");
+  const { language, setLanguage, t } = useI18n();
+  const hasLoadedRemoteBoard = useRef(!remote);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -26,6 +39,33 @@ export const KanbanBoard = () => {
   );
 
   const cardsById = useMemo(() => board.cards, [board.cards]);
+
+  useEffect(() => {
+    if (!remote) {
+      return;
+    }
+
+    getBoard()
+      .then((remoteBoard) => {
+        setBoard(remoteBoard);
+        hasLoadedRemoteBoard.current = true;
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setSaveError(t("boardLoadError"));
+        setIsLoading(false);
+      });
+  }, [remote, t]);
+
+  useEffect(() => {
+    if (!remote || !hasLoadedRemoteBoard.current) {
+      return;
+    }
+
+    saveBoard(board)
+      .then(() => setSaveError(""))
+      .catch(() => setSaveError(t("boardSaveError")));
+  }, [board, remote, t]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -91,6 +131,10 @@ export const KanbanBoard = () => {
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
 
+  if (isLoading) {
+    return <div className="min-h-screen bg-[var(--surface)]" aria-busy="true" />;
+  }
+
   return (
     <div className="relative overflow-hidden">
       <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
@@ -101,26 +145,26 @@ export const KanbanBoard = () => {
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
+                {t("singleBoard")}
               </p>
               <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                Kanban Studio
+                {t("title")}
               </h1>
               <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
+                {t("boardDescription")}
               </p>
             </div>
             <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
               <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                Focus
+                {t("focus")}
               </p>
               <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                One board. Five columns. Zero clutter.
+                {t("focusValue")}
               </p>
             </div>
           </div>
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-4">
             {board.columns.map((column) => (
               <div
                 key={column.id}
@@ -130,7 +174,31 @@ export const KanbanBoard = () => {
                 {column.title}
               </div>
             ))}
+            </div>
+            <button
+              className="rounded-xl border border-[var(--stroke)] px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] hover:border-[var(--primary-blue)]"
+              onClick={onLogout}
+              type="button"
+            >
+              {t("logout")}
+            </button>
           </div>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="font-semibold text-[var(--gray-text)]">{language.toUpperCase()}</span>
+            <button
+              className="rounded-lg border border-[var(--stroke)] px-3 py-1 font-semibold text-[var(--navy-dark)] hover:border-[var(--primary-blue)]"
+              onClick={() => setLanguage(language === "en" ? "es" : "en")}
+              type="button"
+              aria-label="Change language"
+            >
+              {language === "en" ? "ES" : "EN"}
+            </button>
+          </div>
+          {saveError ? (
+            <p className="text-sm font-semibold text-red-700" role="alert">
+              {saveError}
+            </p>
+          ) : null}
         </header>
 
         <DndContext
@@ -159,6 +227,7 @@ export const KanbanBoard = () => {
             ) : null}
           </DragOverlay>
         </DndContext>
+        {remote ? <AIChatSidebar onBoardUpdate={setBoard} /> : null}
       </main>
     </div>
   );
