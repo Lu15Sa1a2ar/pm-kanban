@@ -69,7 +69,7 @@
 
 - [x] Existing frontend unit tests and lint pass.
 - [x] Production build completes.
-- [x] Playwright verifies the board is visible at `/` and a card can be edited or moved. Passed with the frontend test server and mocked API; integrated container verification remains pending.
+- [x] Playwright verifies the board is visible at `/` and a card can be edited or moved. Passed with the frontend test server and mocked API.
 
 ### Success criteria
 
@@ -146,11 +146,11 @@
 ### Tests
 
 - [x] Unit-test API client and mutation states.
-- [ ] E2E-test reload persistence and the main board workflows against the backend. Login and board API smoke tests pass in Docker; full browser persistence E2E remains pending.
+- [x] E2E-test reload persistence and the main board workflows against the backend. Passed against the real container with SQLite persistence.
 
 ### Success criteria
 
-- [ ] Board changes survive a page reload and remain scoped to the signed-in user. Requires the integrated E2E test.
+- [x] Board changes survive a page reload and remain scoped to the signed-in user. Confirmed by integrated E2E.
 
 ## Part 8: OpenRouter connectivity
 
@@ -206,9 +206,9 @@
 ### Tests
 
 - [x] Unit-test chat state transitions and structured update handling.
-- [ ] E2E-test sending a question, displaying the response, and reflecting an AI board update. Frontend E2E is green with a mocked API; real backend E2E remains pending.
-- [ ] Run the full frontend and backend suites; both pass. Full container/browser suite remains pending.
+- [x] E2E-test sending a question, displaying the response, and reflecting an AI board update. Real chat endpoint returned `200` in the integrated E2E test.
+- [x] Run the full frontend and backend suites; both pass. Integrated container E2E also passes.
 
 ### Success criteria
 
-- [ ] A signed-in user can use the sidebar to ask about the board and, when authorized by the structured response, see changes reflected without a manual reload. Unit coverage passes; integrated E2E requires Docker.
+- [x] A signed-in user can use the sidebar to ask about the board and, when authorized by the structured response, see changes reflected without a manual reload. Confirmed by unit and integrated E2E coverage.
