@@ -1,6 +1,6 @@
 # Frontend
 
-The frontend is a Next.js application using React and TypeScript. It is currently a frontend-only Kanban demo; persistence, authentication, backend integration, and AI chat are not implemented yet.
+The frontend is a Next.js application using React and TypeScript. It renders the Kanban board with authentication, backend persistence, an AI chat sidebar, and Spanish/English switching.
 
 ## Structure
 
@@ -15,13 +15,15 @@ The frontend is a Next.js application using React and TypeScript. It is currentl
 
 - `src/app/page.tsx` renders `KanbanBoard` at `/`.
 - The board uses local React state and the demo data from `src/lib/kanban.ts`.
-- Cards support drag and drop through `@dnd-kit` and can be edited.
+- Cards support drag and drop through `@dnd-kit`.
+- Card title and details are edited inline by double-clicking them. Enter or blur commits the change, Escape discards it, and an empty title is ignored. Sorting is disabled while a field is being edited so drag does not capture the input events.
 - Columns are represented by fixed IDs and can be renamed through the board UI.
 - `src/lib/api.ts` communicates with the same-origin FastAPI API for authentication and board persistence.
 - `AuthGate` checks the backend session, handles login/logout, and renders the board only after authentication.
 - `KanbanBoard` can load and save the authenticated board through the backend when rendered with `remote`.
 - `AIChatSidebar` provides authenticated chat, conversation history, loading/error states, and applies structured board updates.
-- Language switching is not implemented yet.
+- `src/lib/i18n.tsx` provides Spanish/English translations; the board header has the language switch.
+- Board saves are triggered only by explicit local mutations. Column renames are debounced (500 ms); card edits, moves, additions, and deletions save immediately.
 
 ## Commands
 

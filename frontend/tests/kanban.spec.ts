@@ -40,6 +40,12 @@ const setupApiMock = async (page: Page) => {
   });
 };
 
+const waitForBoardSave = (page: Page) =>
+  page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/board") && response.request().method() === "PUT"
+  );
+
 const signIn = async (page: Page) => {
   await page.getByLabel("Username").fill("user");
   await page.getByLabel("Password").fill("password");
@@ -81,6 +87,33 @@ test("adds a card to a column", async ({ page }) => {
   await firstColumn.getByPlaceholder("Details").fill("Added via e2e.");
   await firstColumn.getByRole("button", { name: /add( a)? card/i }).click();
   await expect(firstColumn.getByText("Playwright card")).toBeVisible();
+});
+
+test("edits a card title and details with a double click", async ({ page }) => {
+  await setupApiMock(page);
+  await page.goto("/");
+  await signIn(page);
+  const card = page.getByTestId("card-card-1");
+
+  const savedTitle = waitForBoardSave(page);
+  await card.getByText("Align roadmap themes").dblclick();
+  const titleInput = card.getByLabel("Edit card title");
+  await titleInput.fill("Edited in e2e");
+  await titleInput.press("Enter");
+  await expect(card.getByText("Edited in e2e")).toBeVisible();
+  await savedTitle;
+
+  const savedDetails = waitForBoardSave(page);
+  await card.getByText("Draft quarterly themes", { exact: false }).dblclick();
+  const detailsInput = card.getByLabel("Edit card details");
+  await detailsInput.fill("Updated notes from the browser.");
+  await detailsInput.blur();
+  await expect(card.getByText("Updated notes from the browser.")).toBeVisible();
+  await savedDetails;
+
+  await page.reload();
+  await expect(page.getByText("Edited in e2e")).toBeVisible();
+  await expect(page.getByText("Updated notes from the browser.")).toBeVisible();
 });
 
 test("moves a card between columns", async ({ page }) => {

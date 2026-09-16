@@ -19,6 +19,54 @@ describe("KanbanBoard", () => {
     expect(input).toHaveValue("New Name");
   });
 
+  it("edits a card title with a double click", async () => {
+    render(<KanbanBoard />);
+    const column = getFirstColumn();
+
+    await userEvent.dblClick(within(column).getByText("Align roadmap themes"));
+    const input = within(column).getByLabelText("Edit card title");
+    await userEvent.clear(input);
+    await userEvent.type(input, "Renamed by double click{Enter}");
+
+    expect(within(column).getByText("Renamed by double click")).toBeInTheDocument();
+    expect(within(column).queryByLabelText("Edit card title")).not.toBeInTheDocument();
+  });
+
+  it("edits card details with a double click and discards changes on escape", async () => {
+    render(<KanbanBoard />);
+    const column = getFirstColumn();
+    const originalDetails =
+      "Draft quarterly themes with impact statements and metrics.";
+
+    await userEvent.dblClick(within(column).getByText(originalDetails));
+    const textarea = within(column).getByLabelText("Edit card details");
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, "Updated details.");
+    await userEvent.tab();
+
+    expect(within(column).getByText("Updated details.")).toBeInTheDocument();
+
+    await userEvent.dblClick(within(column).getByText("Updated details."));
+    const reopened = within(column).getByLabelText("Edit card details");
+    await userEvent.clear(reopened);
+    await userEvent.type(reopened, "Discarded text{Escape}");
+
+    expect(within(column).getByText("Updated details.")).toBeInTheDocument();
+    expect(within(column).queryByText("Discarded text")).not.toBeInTheDocument();
+  });
+
+  it("keeps the original title when the edit is left empty", async () => {
+    render(<KanbanBoard />);
+    const column = getFirstColumn();
+
+    await userEvent.dblClick(within(column).getByText("Align roadmap themes"));
+    const input = within(column).getByLabelText("Edit card title");
+    await userEvent.clear(input);
+    await userEvent.tab();
+
+    expect(within(column).getByText("Align roadmap themes")).toBeInTheDocument();
+  });
+
   it("adds and removes a card", async () => {
     render(<KanbanBoard />);
     const column = getFirstColumn();

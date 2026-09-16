@@ -8,4 +8,6 @@ services:
     env_file:
       - path: ./.env
         required: false
+    volumes:
+      - ./backend/data:/app/data
     restart: unless-stopped

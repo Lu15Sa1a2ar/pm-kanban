@@ -212,3 +212,143 @@
 ### Success criteria
 
 - [x] A signed-in user can use the sidebar to ask about the board and, when authorized by the structured response, see changes reflected without a manual reload. Confirmed by unit and integrated E2E coverage.
+
+## Part 11: Inline card editing
+
+### Checklist
+
+- [x] Edit a card title by double-clicking it.
+- [x] Edit card details by double-clicking them.
+- [x] Commit the change on Enter (title) or on blur, and discard it on Escape.
+- [x] Ignore an empty title so the backend `min_length` rule is never violated.
+- [x] Disable sorting while a field is being edited so drag does not capture input events.
+- [x] Persist the edit through the existing board save path.
+- [x] Add Spanish/English text for the new labels.
+
+### Tests
+
+- [x] Unit tests cover title editing, details editing, Escape discarding, and the empty-title guard.
+- [x] E2E test edits both fields and verifies the change survives a reload.
+- [x] Full frontend and backend suites pass, including integrated container E2E.
+
+### Success criteria
+
+- [x] A signed-in user can correct a card's title and details in place, and the change persists. Confirmed by unit, mocked E2E, and integrated container E2E coverage.
+## Deployment decisions (approved 2026-09-16)
+
+- Target: public demo shared on LinkedIn, hosted on free tiers only.
+- Frontend and backend both run on Vercel (Hobby plan): the Next.js static export is served from the CDN and FastAPI runs as a Python function under `api/index.py`.
+- Persistence in production moves from the SQLite file to Turso (Free plan) through the `turso-serverless` driver, which is `sqlite3`-compatible. The SQL and the one-JSON-document-per-user model stay unchanged.
+- Turso Free archives databases after 10 days of inactivity and does not unarchive them automatically. A daily Vercel Cron calling `/api/health` keeps the database active. This is mandatory, not optional.
+- Demo mode: every visitor gets an anonymous guest user with its own board and a session that expires 1 hour after creation. Expired guests (user, board, session) are deleted. The seeded `user`/`password` login stays available next to the guest button.
+- AI usage is capped per session (10 chat messages per guest by default) and a spending limit is set in the OpenRouter dashboard. The model stays `openai/gpt-oss-120b`.
+- Two environments, verified in order: local first, production second. Nothing is deployed to production until the local checks pass.
+- Every phase ends with a manual functional test in the local environment, performed by the user, before the phase is checked off.
+
+### Environments
+
+| | Local | Production |
+|---|---|---|
+| Runtime | Docker Compose (`scripts/start.*`), FastAPI serves the static export at `http://localhost:8000` | Vercel: static export on the CDN, FastAPI as a Python function |
+| Database | SQLite file in `backend/data/` (default), or a Turso dev database when `TURSO_DATABASE_URL` is set in `.env` | Turso database `pm-prod` |
+| Secrets | `.env` at the repo root (`OPENROUTER_API_KEY`, optional `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`) | Vercel project environment variables (Production scope) |
+| Driver selection | `Database.connect` uses `turso_serverless` when `TURSO_DATABASE_URL` is set, otherwise `sqlite3` | Always `turso_serverless` |
+| Tests | Backend pytest, frontend Vitest, Playwright mocked E2E, Playwright integrated E2E against the container | Playwright smoke run against the public URL (`E2E_BASE_URL`), plus the manual functional checklist |
+
+Automated tests always run against SQLite locally; Turso is exercised by the local-with-Turso check in Part 13, by the Vercel preview deployment in Part 15, and by the production smoke run.
+
+## Part 12: Demo mode (guest sessions, expiry, AI cap)
+
+### Checklist
+
+- [ ] Commit the pending working-tree changes so this phase starts from a clean `main`.
+- [ ] Add `POST /api/auth/guest`: creates a `guest-<token>` user, seeds its board with `INITIAL_BOARD`, opens a session that expires in 1 hour, and sets the same `pm_session` cookie as the login route.
+- [ ] Add `Database.delete_expired_guests()`: deletes guest users whose session expired (cascade removes sessions and boards). Call it from the guest route and from `/api/health` (Part 13).
+- [ ] Add an `ai_messages` counter to `sessions`; `/api/ai/chat` increments it and returns `429` once the per-session limit (`AI_MESSAGE_LIMIT`, default 10) is reached. Document the schema change in `docs/DATABASE.md`.
+- [ ] `AuthGate`: add a "Try the demo" button that calls the guest route, plus a note that the demo session lasts 1 hour and its data is deleted afterwards. Keep the existing username/password form.
+- [ ] `AIChatSidebar`: show a clear message when the AI limit is reached.
+- [ ] Add Spanish/English text for the new labels in `lib/i18n.tsx`.
+- [ ] Update `AGENTS.md` limitations to describe demo mode.
+
+### Tests
+
+- [ ] Backend unit: guest route creates user, board, and a session expiring in 1 hour; two guests get independent boards; expired guests are deleted with their sessions and boards; the AI route returns `429` after the limit and the counter is per session.
+- [ ] Frontend unit: `AuthGate` renders the demo button and enters the board through the guest route; `AIChatSidebar` renders the limit message on `429`.
+- [ ] Playwright mocked E2E (`tests/kanban.spec.ts`): guest flow enters the board without credentials.
+- [ ] Playwright integrated E2E (`tests/integrated/app.spec.ts`): a guest moves a card in the real container and the change survives a reload; a second guest in a fresh context does not see the first guest's change.
+- [ ] Full suites pass locally: `uv run --group dev pytest`, `npm run test:all`, and `INTEGRATED_E2E=true npx playwright test` against the Docker container.
+
+- [ ] Functional test (manual, by the user, local Docker at `http://localhost:8000`): open the app in two browsers, enter as guest in both, add and move a card in each, reload, and confirm each board is independent; send chat messages until the AI limit message appears; log in with `user`/`password` and confirm the seeded board still works.
+
+### Success criteria
+
+- [ ] Two visitors in separate browsers each get their own board, and a guest whose session is past 1 hour is sent back to the entry screen with its data gone from the database.
+
+## Part 13: Turso driver and health endpoint
+
+### Checklist
+
+- [ ] Add `turso-serverless` to `backend/pyproject.toml`.
+- [ ] `Database.connect`: when `TURSO_DATABASE_URL` is set, connect with `turso_serverless.connect(url, auth_token=TURSO_AUTH_TOKEN)`; otherwise keep `sqlite3`. Both paths set `row_factory` and run the same `initialize()` script.
+- [ ] Add `GET /api/health`: runs `SELECT 1` through the active driver, deletes expired guests, and returns `{"status": "ok"}`. This is the Vercel Cron target.
+- [ ] Create the Turso account and two databases: `pm-dev` and `pm-prod` (same region as the Vercel function, `iad`). Store the dev URL and token in the local `.env` only.
+- [ ] Document the two databases and the driver switch in `docs/DATABASE.md`.
+
+### Tests
+
+- [ ] Backend unit: `Database.connect` picks `turso_serverless` when the env var is set (fake `connect` via `monkeypatch`) and `sqlite3` otherwise; `/api/health` returns `200` and removes expired guests.
+- [ ] Local check with Turso: start the Docker container with `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` for `pm-dev` in `.env`, run the integrated Playwright suite against it, and confirm in the Turso dashboard that the tables and guest rows appear and are cleaned up.
+- [ ] Full suites pass locally against SQLite (no regression when the env var is absent).
+
+- [ ] Functional test (manual, by the user, local Docker): first with SQLite, then with `pm-dev` in `.env`; enter as guest, edit the board, reload, and confirm persistence; open `http://localhost:8000/api/health` and confirm `{"status": "ok"}`; check the rows in the Turso dashboard.
+
+### Success criteria
+
+- [ ] The same container works unchanged against SQLite and against Turso, selected only by environment variables, and `/api/health` works on both.
+
+## Part 14: Vercel packaging
+
+### Checklist
+
+- [ ] Add `api/index.py` at the repo root that puts `backend/` on `sys.path` and exports the FastAPI `app`.
+- [ ] Add a root `requirements.txt` (or point Vercel at `backend/pyproject.toml`) with the backend runtime dependencies.
+- [ ] Add a root `vercel.json`: build command `cd frontend && npm ci && npm run build`, output directory `frontend/out`, rewrite `/api/(.*)` to `/api/index`, and a daily cron on `/api/health`.
+- [ ] `main.py`: mount the static directory only when `backend/static` exists, so the function starts without the frontend bundle. Keep the Docker image behaviour unchanged.
+- [ ] Add `.vercelignore` to exclude `backend/data`, `backend/.venv`, `node_modules`, and test files from the function bundle.
+- [ ] Set the Playwright `baseURL` from `E2E_BASE_URL` when present so the integrated suite can target any URL.
+
+### Tests
+
+- [ ] Backend unit: the app starts and serves `/api/hello` when the static directory is missing; existing static-serving tests still pass when it is present.
+- [ ] Full suites pass locally; the Docker image still builds and serves the frontend at `/`.
+- [ ] `vercel build` (Vercel CLI) succeeds locally and its output contains the static export and the Python function.
+
+- [ ] Functional test (manual, by the user, local Docker): restart the container after the packaging changes and repeat the guest flow, the chat, and the language switch to confirm nothing changed locally.
+
+### Success criteria
+
+- [ ] The repository is deployable to Vercel as-is from `main`, with no change to how the local Docker environment runs.
+
+## Part 15: Production deployment and functional verification
+
+### Checklist
+
+- [ ] Push `main` to GitHub and import the repository into Vercel (Hobby, Root Directory = repo root).
+- [ ] Set Production environment variables in Vercel: `OPENROUTER_API_KEY`, `TURSO_DATABASE_URL` (pm-prod), `TURSO_AUTH_TOKEN`, `AI_MESSAGE_LIMIT`.
+- [ ] Set a spending limit on the OpenRouter key.
+- [ ] Deploy a Vercel preview first (branch or `vercel` without `--prod`) pointed at `pm-dev`, run the smoke suite against it, then promote to production.
+- [ ] Confirm the cron job is registered in the Vercel dashboard and that its first run hits `/api/health` with `200`.
+- [ ] Update `README.md`, `CLAUDE.md`, and `AGENTS.md` with the final deployment model and the public URL.
+
+### Tests
+
+- [ ] Smoke E2E against production: `E2E_BASE_URL=https://<app>.vercel.app INTEGRATED_E2E=true npx playwright test` passes (guest flow, card persistence, real AI chat).
+- [ ] Manual functional checklist on the public URL, in Spanish and English: enter as guest, add/edit/move a card, rename a column, reload and confirm persistence, chat with the AI and see a board update, hit the AI limit and see the message, log out, log in as `user`/`password`, and confirm a second browser gets an independent board.
+- [ ] Wait past the 1-hour window and confirm the guest is redirected to the entry screen and its rows are gone from `pm-prod`.
+- [ ] Redeploy (empty commit) and confirm existing boards survive, which validates that state lives in Turso and not in the function.
+
+- [ ] Functional test (manual, by the user): the checklist above on the Vercel preview URL first, then on the production URL.
+
+### Success criteria
+
+- [ ] The public URL loads in under 3 seconds on a cold start, every feature in the manual checklist works, no credentials are needed to try the demo, and a day later the database is still active because the cron ran.

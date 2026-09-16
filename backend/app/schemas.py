@@ -39,6 +39,13 @@ class BoardData(BaseModel):
         return self
 
 
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
+
+
 class ChatMessage(BaseModel):
     role: str
     content: str

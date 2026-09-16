@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -31,6 +31,7 @@ export const KanbanBoard = ({
   const [saveError, setSaveError] = useState("");
   const { language, setLanguage, t } = useI18n();
   const hasLoadedRemoteBoard = useRef(!remote);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -58,14 +59,37 @@ export const KanbanBoard = ({
   }, [remote, t]);
 
   useEffect(() => {
-    if (!remote || !hasLoadedRemoteBoard.current) {
-      return;
-    }
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
 
-    saveBoard(board)
-      .then(() => setSaveError(""))
-      .catch(() => setSaveError(t("boardSaveError")));
-  }, [board, remote, t]);
+  const persistBoard = useCallback(
+    (nextBoard: BoardData) => {
+      if (!remote || !hasLoadedRemoteBoard.current) {
+        return;
+      }
+      saveBoard(nextBoard)
+        .then(() => setSaveError(""))
+        .catch(() => setSaveError(t("boardSaveError")));
+    },
+    [remote, t]
+  );
+
+  const persistBoardDebounced = useCallback(
+    (nextBoard: BoardData) => {
+      if (!remote || !hasLoadedRemoteBoard.current) {
+        return;
+      }
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      saveTimeoutRef.current = setTimeout(() => persistBoard(nextBoard), 500);
+    },
+    [remote, persistBoard]
+  );
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -79,54 +103,72 @@ export const KanbanBoard = ({
       return;
     }
 
-    setBoard((prev) => ({
-      ...prev,
-      columns: moveCard(prev.columns, active.id as string, over.id as string),
-    }));
+    const nextBoard = {
+      ...board,
+      columns: moveCard(board.columns, active.id as string, over.id as string),
+    };
+    setBoard(nextBoard);
+    persistBoard(nextBoard);
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
-    setBoard((prev) => ({
-      ...prev,
-      columns: prev.columns.map((column) =>
+    const nextBoard = {
+      ...board,
+      columns: board.columns.map((column) =>
         column.id === columnId ? { ...column, title } : column
       ),
-    }));
+    };
+    setBoard(nextBoard);
+    persistBoardDebounced(nextBoard);
   };
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
     const id = createId("card");
-    setBoard((prev) => ({
-      ...prev,
+    const nextBoard = {
+      ...board,
       cards: {
-        ...prev.cards,
+        ...board.cards,
         [id]: { id, title, details: details || "No details yet." },
       },
-      columns: prev.columns.map((column) =>
+      columns: board.columns.map((column) =>
         column.id === columnId
           ? { ...column, cardIds: [...column.cardIds, id] }
           : column
       ),
-    }));
+    };
+    setBoard(nextBoard);
+    persistBoard(nextBoard);
+  };
+
+  const handleEditCard = (cardId: string, title: string, details: string) => {
+    const nextBoard = {
+      ...board,
+      cards: {
+        ...board.cards,
+        [cardId]: { ...board.cards[cardId], title, details },
+      },
+    };
+    setBoard(nextBoard);
+    persistBoard(nextBoard);
   };
 
   const handleDeleteCard = (columnId: string, cardId: string) => {
-    setBoard((prev) => {
-      return {
-        ...prev,
-        cards: Object.fromEntries(
-          Object.entries(prev.cards).filter(([id]) => id !== cardId)
-        ),
-        columns: prev.columns.map((column) =>
-          column.id === columnId
-            ? {
-                ...column,
-                cardIds: column.cardIds.filter((id) => id !== cardId),
-              }
-            : column
-        ),
-      };
-    });
+    const nextBoard = {
+      ...board,
+      cards: Object.fromEntries(
+        Object.entries(board.cards).filter(([id]) => id !== cardId)
+      ),
+      columns: board.columns.map((column) =>
+        column.id === columnId
+          ? {
+              ...column,
+              cardIds: column.cardIds.filter((id) => id !== cardId),
+            }
+          : column
+      ),
+    };
+    setBoard(nextBoard);
+    persistBoard(nextBoard);
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
@@ -216,6 +258,7 @@ export const KanbanBoard = ({
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}
                 onDeleteCard={handleDeleteCard}
+                onEditCard={handleEditCard}
               />
             ))}
           </section>

@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Cookie, FastAPI, HTTPException, Response, status
@@ -10,15 +11,21 @@ from app.ai import (
     ask_openrouter_structured,
 )
 from app.database import Database, verify_password
-from app.schemas import BoardData, ChatRequest, ChatResponse
+from app.schemas import BoardData, ChatRequest, ChatResponse, LoginRequest
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 SESSION_COOKIE = "pm_session"
 database = Database()
-database.initialize()
 
-app = FastAPI(title="Project Management MVP API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    database.initialize()
+    yield
+
+
+app = FastAPI(title="Project Management MVP API", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/api/hello")
@@ -36,9 +43,9 @@ def authenticated_user(session_id: str | None) -> dict[str, object]:
 
 
 @app.post("/api/auth/login")
-def login(credentials: dict[str, str], response: Response) -> dict[str, str]:
-    user = database.find_user(credentials.get("username", ""))
-    if user is None or not verify_password(credentials.get("password", ""), user["password_hash"]):
+def login(credentials: LoginRequest, response: Response) -> dict[str, str]:
+    user = database.find_user(credentials.username)
+    if user is None or not verify_password(credentials.password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     response.set_cookie(SESSION_COOKIE, database.create_session(user["id"]), httponly=True, samesite="lax")
     return {"username": user["username"]}

@@ -108,6 +108,7 @@ class Database:
         session_id = secrets.token_urlsafe(32)
         now = datetime.now(timezone.utc)
         with self.connect() as connection:
+            connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (now.isoformat(),))
             connection.execute(
                 "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
                 (session_id, user_id, now.isoformat(), (now + timedelta(days=1)).isoformat()),
