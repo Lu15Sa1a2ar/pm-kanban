@@ -11,9 +11,14 @@ test("persists a card through the real container", async ({ page }) => {
   await expect(page.getByRole("button", { name: /log out/i })).toBeVisible();
   await firstColumn.getByRole("button", { name: /add a card/i }).click();
   await firstColumn.getByPlaceholder("Card title").fill(cardTitle);
-  await firstColumn.getByPlaceholder("Details").fill("Stored in SQLite.");
+  await firstColumn.getByPlaceholder("Details").fill("Stored in the database.");
+  const savedCard = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/board") && response.request().method() === "PUT"
+  );
   await firstColumn.getByRole("button", { name: /add( a)? card/i }).click();
   await expect(firstColumn.getByText(cardTitle)).toBeVisible();
+  await savedCard;
 
   await page.reload();
   await expect(page.getByText(cardTitle)).toBeVisible();

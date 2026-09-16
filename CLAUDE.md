@@ -29,7 +29,7 @@ To run a single Vitest file: `npx vitest run src/lib/kanban.test.ts`. To run a s
 - `uv run --group dev pytest tests/test_main.py::test_name` — run a single test
 - `uv run uvicorn app.main:app --reload` — run the backend locally
 
-Backend env vars: `OPENROUTER_API_KEY` (enables `/api/ai/connectivity` and `/api/ai/chat`), `PM_DATABASE_PATH` (override the SQLite path; default `backend/data/project-management.db`). `AI_MESSAGE_LIMIT` (chat messages allowed per session before `/api/ai/chat` returns 429; default 10). Planned (Part 13): `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (switch persistence to Turso).
+Backend env vars: `OPENROUTER_API_KEY` (enables `/api/ai/connectivity` and `/api/ai/chat`), `PM_DATABASE_PATH` (override the SQLite path; default `backend/data/project-management.db`). `AI_MESSAGE_LIMIT` (chat messages allowed per session before `/api/ai/chat` returns 429; default 10). `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` switch persistence to Turso through `turso-serverless`; leave them unset (or empty) for SQLite. Every Turso statement is one HTTPS round trip, so keep the number of statements per request low and do related writes in one `with database.connect()` block.
 
 ### Docker (full stack, from repo root)
 
@@ -45,7 +45,7 @@ Backend env vars: `OPENROUTER_API_KEY` (enables `/api/ai/connectivity` and `/api
 
 Two environments, always verified in this order: local first, production second. Nothing goes to production until the local checks (backend pytest, Vitest, mocked Playwright, integrated Playwright against Docker) pass.
 
-| | Local | Production (planned, `docs/PLAN.md` Parts 13-15) |
+| | Local | Production (planned, `docs/PLAN.md` Parts 14-15) |
 |---|---|---|
 | Runtime | Docker Compose; FastAPI serves the static export at `localhost:8000` | Vercel Hobby: static export on the CDN, FastAPI as a Python function (`api/index.py`) |
 | Database | SQLite file in `backend/data/` (or Turso `pm-dev` when `TURSO_DATABASE_URL` is set in `.env`) | Turso `pm-prod` via `turso-serverless` |
@@ -60,7 +60,7 @@ Production constraints to keep in mind when touching backend code: the function 
 
 **Backend** (`backend/app/`):
 - `main.py` — FastAPI app, all routes (auth, board CRUD, AI chat), static file serving.
-- `database.py` — SQLite init/seeding, password hashing, session management, board persistence. Owns the only path that touches the database; the planned Turso driver switch lives in `Database.connect` and nowhere else.
+- `database.py` — init/seeding, password hashing, session management, guest lifecycle, board persistence. Owns the only path that touches the database; the SQLite/Turso driver switch lives in `Database.connect` and nowhere else.
 - `schemas.py` — Pydantic models validating the full board document (columns, cards, ordering) before anything is persisted.
 - `ai.py` — OpenRouter client (`openai/gpt-oss-120b` model), builds structured requests/responses for the chat feature.
 

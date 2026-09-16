@@ -36,6 +36,14 @@ def hello() -> dict[str, str]:
     return {"message": "Hello from the Project Management MVP backend"}
 
 
+@app.get("/api/health")
+def health() -> dict[str, str]:
+    with database.connect() as connection:
+        connection.execute("SELECT 1").fetchone()
+    database.delete_expired_guests()
+    return {"status": "ok"}
+
+
 def authenticated_user(session_id: str | None) -> dict[str, object]:
     if not session_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
@@ -56,11 +64,9 @@ def login(credentials: LoginRequest, response: Response) -> dict[str, str]:
 
 @app.post("/api/auth/guest")
 def guest(response: Response) -> dict[str, str]:
-    database.delete_expired_guests()
-    user = database.create_guest()
-    session_id = database.create_session(int(user["id"]), GUEST_SESSION_LIFETIME)
-    response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="lax")
-    return {"username": str(user["username"])}
+    guest = database.create_guest(GUEST_SESSION_LIFETIME)
+    response.set_cookie(SESSION_COOKIE, guest["session_id"], httponly=True, samesite="lax")
+    return {"username": guest["username"]}
 
 
 @app.post("/api/auth/logout", status_code=status.HTTP_204_NO_CONTENT)

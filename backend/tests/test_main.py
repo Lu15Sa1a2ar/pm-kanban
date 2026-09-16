@@ -1,6 +1,8 @@
+import sqlite3
 from datetime import datetime, timedelta
 
 import pytest
+import turso_serverless
 from fastapi.testclient import TestClient
 
 from app.database import utc_now
@@ -261,3 +263,43 @@ def test_initialize_adds_ai_messages_to_existing_sessions_table(tmp_path) -> Non
     with database.connect() as connection:
         columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
     assert "ai_messages" in columns
+
+
+def test_health_checks_database_and_removes_expired_guests() -> None:
+    client = TestClient(app)
+    client.post("/api/auth/guest")
+    with database.connect() as connection:
+        connection.execute("UPDATE sessions SET expires_at = ?", (utc_now(),))
+
+    response = TestClient(app).get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    with database.connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 1
+
+
+def test_connect_uses_turso_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TURSO_DATABASE_URL", "libsql://example.turso.io")
+    monkeypatch.setenv("TURSO_AUTH_TOKEN", "token")
+    captured: dict[str, object] = {}
+
+    class FakeConnection:
+        row_factory = None
+
+    def fake_connect(url, *, auth_token=None):
+        captured.update(url=url, auth_token=auth_token)
+        return FakeConnection()
+
+    monkeypatch.setattr("app.database.turso_serverless.connect", fake_connect)
+
+    connection = database.connect()
+
+    assert captured == {"url": "libsql://example.turso.io", "auth_token": "token"}
+    assert connection.row_factory is turso_serverless.Row
+
+
+def test_connect_uses_sqlite_without_turso(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TURSO_DATABASE_URL", raising=False)
+
+    assert isinstance(database.connect(), sqlite3.Connection)

@@ -44,6 +44,19 @@ The session cookie contains only the opaque session ID. Session rows can be dele
 
 `ai_messages` is incremented before each call to `/api/ai/chat`; once it exceeds `AI_MESSAGE_LIMIT` (default 10) the route returns `429` without contacting the model. The limit applies to every session, including the seeded user's, so the OpenRouter key is never exposed to unbounded use.
 
+## Storage backends
+
+`Database.connect` picks the driver from the environment and nothing else in the code changes:
+
+| | SQLite (default) | Turso |
+| --- | --- | --- |
+| Selected when | `TURSO_DATABASE_URL` is unset | `TURSO_DATABASE_URL` is set (with `TURSO_AUTH_TOKEN`) |
+| Driver | `sqlite3` from the standard library | `turso-serverless` (pure Python, `sqlite3`-compatible DB-API over HTTP) |
+| Storage | File at `PM_DATABASE_PATH` (default `backend/data/project-management.db`) | Hosted libSQL database |
+| Used by | Local Docker, all automated tests | Production on Vercel; local Docker when the dev database is configured in `.env` |
+
+Two Turso databases exist: `pm-dev` (local verification and Vercel previews) and `pm-prod` (production only). Turso's free plan archives a database after 10 days without activity, so production runs a daily cron against `GET /api/health`, which executes `SELECT 1` and deletes expired guests.
+
 ## Board JSON
 
 `boards.data_json` follows the existing frontend shape:

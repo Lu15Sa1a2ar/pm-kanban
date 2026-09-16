@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import turso_serverless
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DATABASE_PATH = BASE_DIR / "data" / "project-management.db"
 
@@ -51,7 +53,13 @@ class Database:
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path or os.getenv("PM_DATABASE_PATH", DEFAULT_DATABASE_PATH))
 
-    def connect(self) -> sqlite3.Connection:
+    def connect(self) -> sqlite3.Connection | turso_serverless.Connection:
+        turso_url = os.getenv("TURSO_DATABASE_URL")
+        if turso_url:
+            # Every statement is one HTTPS round trip; Turso enables foreign keys by default.
+            connection = turso_serverless.connect(turso_url, auth_token=os.getenv("TURSO_AUTH_TOKEN"))
+            connection.row_factory = turso_serverless.Row
+            return connection
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
@@ -110,30 +118,45 @@ class Database:
                 "SELECT * FROM users WHERE username = ?", (username,)
             ).fetchone()
 
-    def create_guest(self) -> dict[str, Any]:
+    def create_guest(self, lifetime: timedelta) -> dict[str, str]:
+        """Create a guest user, its board, and its session in one transaction.
+
+        Expired guests are removed first so demo data never outlives its session.
+        """
         username = f"guest-{secrets.token_urlsafe(8)}"
+        session_id = secrets.token_urlsafe(32)
+        now = datetime.now(timezone.utc)
         with self.connect() as connection:
+            self._delete_expired_guests(connection, now.isoformat())
             cursor = connection.execute(
                 "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
-                (username, hash_password(secrets.token_urlsafe(16)), utc_now()),
+                (username, hash_password(secrets.token_urlsafe(16)), now.isoformat()),
             )
             user_id = int(cursor.lastrowid)
             connection.execute(
                 "INSERT INTO boards (user_id, data_json, updated_at) VALUES (?, ?, ?)",
-                (user_id, json.dumps(INITIAL_BOARD), utc_now()),
+                (user_id, json.dumps(INITIAL_BOARD), now.isoformat()),
             )
-        return {"id": user_id, "username": username}
+            connection.execute(
+                "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                (session_id, user_id, now.isoformat(), (now + lifetime).isoformat()),
+            )
+        return {"username": username, "session_id": session_id}
 
     def delete_expired_guests(self) -> None:
         with self.connect() as connection:
-            connection.execute(
-                """
-                DELETE FROM users
-                WHERE username LIKE 'guest-%'
-                  AND id NOT IN (SELECT user_id FROM sessions WHERE expires_at > ?)
-                """,
-                (utc_now(),),
-            )
+            self._delete_expired_guests(connection, utc_now())
+
+    @staticmethod
+    def _delete_expired_guests(connection: Any, now: str) -> None:
+        connection.execute(
+            """
+            DELETE FROM users
+            WHERE username LIKE 'guest-%'
+              AND id NOT IN (SELECT user_id FROM sessions WHERE expires_at > ?)
+            """,
+            (now,),
+        )
 
     def create_session(self, user_id: int, lifetime: timedelta = timedelta(days=1)) -> str:
         session_id = secrets.token_urlsafe(32)

@@ -288,23 +288,23 @@ Automated tests always run against SQLite locally; Turso is exercised by the loc
 
 ### Checklist
 
-- [ ] Add `turso-serverless` to `backend/pyproject.toml`.
-- [ ] `Database.connect`: when `TURSO_DATABASE_URL` is set, connect with `turso_serverless.connect(url, auth_token=TURSO_AUTH_TOKEN)`; otherwise keep `sqlite3`. Both paths set `row_factory` and run the same `initialize()` script.
-- [ ] Add `GET /api/health`: runs `SELECT 1` through the active driver, deletes expired guests, and returns `{"status": "ok"}`. This is the Vercel Cron target.
-- [ ] Create the Turso account and two databases: `pm-dev` and `pm-prod` (same region as the Vercel function, `iad`). Store the dev URL and token in the local `.env` only.
-- [ ] Document the two databases and the driver switch in `docs/DATABASE.md`.
+- [x] Add `turso-serverless` to `backend/pyproject.toml`.
+- [x] `Database.connect`: when `TURSO_DATABASE_URL` is set, connect with `turso_serverless.connect(url, auth_token=TURSO_AUTH_TOKEN)`; otherwise keep `sqlite3`. Both paths set `row_factory` and run the same `initialize()` script. Turso enables foreign keys by default, so the `PRAGMA` is only issued for SQLite; guest creation runs in one transaction because every statement is one HTTPS round trip.
+- [x] Add `GET /api/health`: runs `SELECT 1` through the active driver, deletes expired guests, and returns `{"status": "ok"}`. This is the Vercel Cron target.
+- [x] Create the Turso account and two databases: `pm-dev` and `pm-prod` (same region as the Vercel function, `iad`). Store the dev URL and token in the local `.env` only.
+- [x] Document the two databases and the driver switch in `docs/DATABASE.md`.
 
 ### Tests
 
-- [ ] Backend unit: `Database.connect` picks `turso_serverless` when the env var is set (fake `connect` via `monkeypatch`) and `sqlite3` otherwise; `/api/health` returns `200` and removes expired guests.
-- [ ] Local check with Turso: start the Docker container with `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` for `pm-dev` in `.env`, run the integrated Playwright suite against it, and confirm in the Turso dashboard that the tables and guest rows appear and are cleaned up.
-- [ ] Full suites pass locally against SQLite (no regression when the env var is absent).
+- [x] Backend unit: `Database.connect` picks `turso_serverless` when the env var is set (fake `connect` via `monkeypatch`) and `sqlite3` otherwise; `/api/health` returns `200` and removes expired guests. 19/19.
+- [x] Local check with Turso: start the Docker container with `TURSO_DATABASE_URL`/`TURSO_AUTH_TOKEN` for `pm-dev` in `.env`, run the integrated Playwright suite against it, and confirm in the Turso dashboard that the tables and guest rows appear and are cleaned up. Integrated 3/3 against `pm-dev`; expiring 16 guest sessions and calling `/api/health` removed 16 users, boards and sessions remotely. From this machine each statement costs ~600 ms (TLS handshake per request to `iad`); the integrated test now waits for the board `PUT` before reloading.
+- [x] Full suites pass locally against SQLite (no regression when the env var is absent). Integrated 3/3 with the Turso variables blanked; `/api/health` in 0.14 s.
 
-- [ ] Functional test (manual, by the user, local Docker): first with SQLite, then with `pm-dev` in `.env`; enter as guest, edit the board, reload, and confirm persistence; open `http://localhost:8000/api/health` and confirm `{"status": "ok"}`; check the rows in the Turso dashboard.
+- [x] Functional test (manual, by the user, local Docker): first with SQLite, then with `pm-dev` in `.env`; enter as guest, edit the board, reload, and confirm persistence; open `http://localhost:8000/api/health` and confirm `{"status": "ok"}`; check the rows in the Turso dashboard.
 
 ### Success criteria
 
-- [ ] The same container works unchanged against SQLite and against Turso, selected only by environment variables, and `/api/health` works on both.
+- [x] The same container works unchanged against SQLite and against Turso, selected only by environment variables, and `/api/health` works on both. Verified by the user on 2026-09-16.
 
 ## Part 14: Vercel packaging
 
