@@ -1,6 +1,9 @@
+from datetime import datetime, timedelta
+
 import pytest
 from fastapi.testclient import TestClient
 
+from app.database import utc_now
 from app.main import app, database
 
 client = TestClient(app)
@@ -168,3 +171,93 @@ def test_ai_chat_passes_history_and_rejects_invalid_board_update(
     assert response.status_code == 502
     assert captured["question"] == "What is next?"
     assert captured["history"] == [{"role": "user", "content": "Hello"}]
+
+
+def test_guest_gets_its_own_board_and_hour_long_session() -> None:
+    client = TestClient(app)
+
+    response = client.post("/api/auth/guest")
+
+    assert response.status_code == 200
+    username = response.json()["username"]
+    assert username.startswith("guest-")
+    assert client.get("/api/me").json() == {"username": username}
+    assert client.get("/api/board").json()["columns"][0]["cardIds"] == ["card-1"]
+
+    with database.connect() as connection:
+        session = connection.execute("SELECT created_at, expires_at FROM sessions").fetchone()
+    lifetime = datetime.fromisoformat(session["expires_at"]) - datetime.fromisoformat(session["created_at"])
+    assert lifetime == timedelta(hours=1)
+
+
+def test_guests_do_not_share_boards() -> None:
+    first = TestClient(app)
+    second = TestClient(app)
+    first.post("/api/auth/guest")
+    second.post("/api/auth/guest")
+
+    board = first.get("/api/board").json()
+    board["columns"][0]["title"] = "Ideas"
+    first.put("/api/board", json=board)
+
+    assert second.get("/api/board").json()["columns"][0]["title"] == "Backlog"
+    assert TestClient(app).post(
+        "/api/auth/login", json={"username": "user", "password": "password"}
+    ).status_code == 200
+
+
+def test_expired_guests_are_deleted_with_their_data() -> None:
+    client = TestClient(app)
+    client.post("/api/auth/guest")
+    with database.connect() as connection:
+        connection.execute("UPDATE sessions SET expires_at = ?", (utc_now(),))
+
+    assert client.get("/api/board").status_code == 401
+
+    TestClient(app).post("/api/auth/guest")
+
+    with database.connect() as connection:
+        users = connection.execute("SELECT username FROM users ORDER BY id").fetchall()
+        assert [row["username"] for row in users][0] == "user"
+        assert len(users) == 2
+        assert connection.execute("SELECT COUNT(*) FROM boards").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 1
+
+
+def test_ai_chat_is_limited_per_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_MESSAGE_LIMIT", "2")
+    monkeypatch.setattr(
+        "app.main.ask_openrouter_structured",
+        lambda question, board, history: {"response": "ok", "board": None},
+    )
+    client = TestClient(app)
+    client.post("/api/auth/guest")
+    payload = {"question": "Hello", "history": []}
+
+    assert client.post("/api/ai/chat", json=payload).status_code == 200
+    assert client.post("/api/ai/chat", json=payload).status_code == 200
+    assert client.post("/api/ai/chat", json=payload).status_code == 429
+
+    other = TestClient(app)
+    other.post("/api/auth/guest")
+    assert other.post("/api/ai/chat", json=payload).status_code == 200
+
+
+def test_initialize_adds_ai_messages_to_existing_sessions_table(tmp_path) -> None:
+    database.path = tmp_path / "legacy.db"
+    with database.connect() as connection:
+        connection.executescript(
+            """
+            CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL, created_at TEXT NOT NULL);
+            CREATE TABLE sessions (id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                created_at TEXT NOT NULL, expires_at TEXT NOT NULL);
+            """
+        )
+
+    database.initialize()
+
+    with database.connect() as connection:
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
+    assert "ai_messages" in columns

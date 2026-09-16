@@ -6,6 +6,8 @@ Use SQLite as the local database. Store each user's Kanban board as one validate
 
 Authentication records are stored in SQLite. The MVP seeds one user named `user`; the password is stored as a password hash, never as plaintext. The application may continue to use the agreed `user` / `password` seed credentials while the backend authentication route is introduced.
 
+Demo mode adds guest users: `POST /api/auth/guest` inserts a `guest-<random>` user with an unguessable password hash, its own initial board, and a session that expires 1 hour after creation. Guest users whose session is no longer valid are deleted (the foreign keys cascade to their board and sessions) whenever a new guest is created.
+
 ## Tables
 
 ### `users`
@@ -36,8 +38,11 @@ A unique `user_id` means the MVP has one board per user while allowing the relat
 | `user_id` | INTEGER | Required foreign key to `users.id` |
 | `created_at` | TEXT | Required ISO-8601 timestamp |
 | `expires_at` | TEXT | Required ISO-8601 timestamp |
+| `ai_messages` | INTEGER | Required, default 0; chat messages sent in this session |
 
-The session cookie contains only the opaque session ID. Session rows can be deleted when they expire or when the user logs out.
+The session cookie contains only the opaque session ID. Session rows can be deleted when they expire or when the user logs out. Seeded-user sessions last 1 day; guest sessions last 1 hour.
+
+`ai_messages` is incremented before each call to `/api/ai/chat`; once it exceeds `AI_MESSAGE_LIMIT` (default 10) the route returns `429` without contacting the model. The limit applies to every session, including the seeded user's, so the OpenRouter key is never exposed to unbounded use.
 
 ## Board JSON
 
@@ -77,7 +82,7 @@ Validation rules:
 On startup or the first database access:
 
 1. Create the SQLite file's parent directory if needed.
-2. Create tables and foreign-key constraints if they do not exist.
+2. Create tables and foreign-key constraints if they do not exist, and add `sessions.ai_messages` to databases created before it existed.
 3. Insert the seeded `user` record if it is missing.
 4. Insert that user's initial board JSON if it is missing.
 

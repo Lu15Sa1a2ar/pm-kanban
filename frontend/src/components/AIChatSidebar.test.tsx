@@ -1,10 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
-import { chat } from "@/lib/api";
+import { ApiError, chat } from "@/lib/api";
 import { initialData } from "@/lib/kanban";
 
-vi.mock("@/lib/api", () => ({
+vi.mock("@/lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api")>()),
   chat: vi.fn(),
 }));
 
@@ -31,5 +32,27 @@ describe("AIChatSidebar", () => {
     expect(onBoardUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ columns: expect.arrayContaining([expect.objectContaining({ title: "Ideas" })]) })
     );
+  });
+
+  it("tells the user when the AI message limit is reached", async () => {
+    vi.mocked(chat).mockRejectedValueOnce(new ApiError(429, "AI message limit reached for this session"));
+    render(<AIChatSidebar onBoardUpdate={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText("AI question"), "One more");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findByText("You have reached the AI message limit for this session.")
+    ).toBeInTheDocument();
+  });
+
+  it("shows a generic error for other failures", async () => {
+    vi.mocked(chat).mockRejectedValueOnce(new ApiError(502, "bad gateway"));
+    render(<AIChatSidebar onBoardUpdate={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText("AI question"), "Hello");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Unable to reach the AI assistant.")).toBeInTheDocument();
   });
 });

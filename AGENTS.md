@@ -14,6 +14,8 @@ This project is building a Project Management App. Key features:
 
 For the MVP, there will only be a user sign in (hardcoded to 'user' and 'password') but the database will support multiple users for future.
 
+Demo mode (for the public deployment): a visitor can enter without credentials as a guest. Each guest gets its own board and a session that expires 1 hour after creation; expired guests and their data are deleted. AI chat is capped per session (`AI_MESSAGE_LIMIT`, default 10).
+
 For the MVP, there will only be 1 Kanban board per signed in user.
 
 For the MVP, this will run locally (in a docker container)

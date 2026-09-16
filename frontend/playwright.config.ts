@@ -4,12 +4,13 @@ const integrated = process.env.INTEGRATED_E2E === "true";
 
 export default defineConfig({
   testDir: integrated ? "./tests/integrated" : "./tests",
+  testIgnore: integrated ? [] : ["**/integrated/**"],
   timeout: 60_000,
   expect: {
     timeout: 10_000,
   },
   use: {
-    baseURL: integrated ? "http://127.0.0.1:8000" : "http://127.0.0.1:3000",
+    baseURL: process.env.E2E_BASE_URL || (integrated ? "http://127.0.0.1:8000" : "http://127.0.0.1:3000"),
     trace: "retain-on-failure",
   },
   ...(integrated

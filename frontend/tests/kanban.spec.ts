@@ -23,6 +23,11 @@ const setupApiMock = async (page: Page) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username: "user" }) });
   });
 
+  await page.route("**/api/auth/guest", async (route) => {
+    authenticated = true;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username: "guest-e2e" }) });
+  });
+
   await page.route("**/api/auth/logout", async (route) => {
     authenticated = false;
     await route.fulfill({ status: 204 });
@@ -58,6 +63,15 @@ test("loads the kanban board", async ({ page }) => {
   await page.goto("/");
   await signIn(page);
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
+  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
+});
+
+test("enters the board as a guest without credentials", async ({ page }) => {
+  await setupApiMock(page);
+  await page.goto("/");
+  await expect(page.getByText(/demo session lasts 1 hour/i)).toBeVisible();
+  await page.getByRole("button", { name: "Try the demo" }).click();
+  await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
 });
 

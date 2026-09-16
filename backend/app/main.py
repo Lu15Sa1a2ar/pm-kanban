@@ -1,4 +1,6 @@
+import os
 from contextlib import asynccontextmanager
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi import Cookie, FastAPI, HTTPException, Response, status
@@ -16,6 +18,7 @@ from app.schemas import BoardData, ChatRequest, ChatResponse, LoginRequest
 BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_DIR = BASE_DIR / "static"
 SESSION_COOKIE = "pm_session"
+GUEST_SESSION_LIFETIME = timedelta(hours=1)
 database = Database()
 
 
@@ -49,6 +52,15 @@ def login(credentials: LoginRequest, response: Response) -> dict[str, str]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     response.set_cookie(SESSION_COOKIE, database.create_session(user["id"]), httponly=True, samesite="lax")
     return {"username": user["username"]}
+
+
+@app.post("/api/auth/guest")
+def guest(response: Response) -> dict[str, str]:
+    database.delete_expired_guests()
+    user = database.create_guest()
+    session_id = database.create_session(int(user["id"]), GUEST_SESSION_LIFETIME)
+    response.set_cookie(SESSION_COOKIE, session_id, httponly=True, samesite="lax")
+    return {"username": str(user["username"])}
 
 
 @app.post("/api/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -97,6 +109,11 @@ def ai_chat(
     session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE),
 ) -> ChatResponse:
     user = authenticated_user(session_id)
+    if database.count_ai_message(str(session_id)) > int(os.getenv("AI_MESSAGE_LIMIT", "10")):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="AI message limit reached for this session",
+        )
     current_board = database.get_board(int(user["id"]))
     try:
         result = ask_openrouter_structured(

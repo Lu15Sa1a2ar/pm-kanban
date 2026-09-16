@@ -78,10 +78,16 @@ class Database:
                     id TEXT PRIMARY KEY,
                     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     created_at TEXT NOT NULL,
-                    expires_at TEXT NOT NULL
+                    expires_at TEXT NOT NULL,
+                    ai_messages INTEGER NOT NULL DEFAULT 0
                 );
                 """
             )
+            session_columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
+            if "ai_messages" not in session_columns:
+                connection.execute(
+                    "ALTER TABLE sessions ADD COLUMN ai_messages INTEGER NOT NULL DEFAULT 0"
+                )
             user = connection.execute(
                 "SELECT id FROM users WHERE username = ?", ("user",)
             ).fetchone()
@@ -104,16 +110,51 @@ class Database:
                 "SELECT * FROM users WHERE username = ?", (username,)
             ).fetchone()
 
-    def create_session(self, user_id: int) -> str:
+    def create_guest(self) -> dict[str, Any]:
+        username = f"guest-{secrets.token_urlsafe(8)}"
+        with self.connect() as connection:
+            cursor = connection.execute(
+                "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
+                (username, hash_password(secrets.token_urlsafe(16)), utc_now()),
+            )
+            user_id = int(cursor.lastrowid)
+            connection.execute(
+                "INSERT INTO boards (user_id, data_json, updated_at) VALUES (?, ?, ?)",
+                (user_id, json.dumps(INITIAL_BOARD), utc_now()),
+            )
+        return {"id": user_id, "username": username}
+
+    def delete_expired_guests(self) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                DELETE FROM users
+                WHERE username LIKE 'guest-%'
+                  AND id NOT IN (SELECT user_id FROM sessions WHERE expires_at > ?)
+                """,
+                (utc_now(),),
+            )
+
+    def create_session(self, user_id: int, lifetime: timedelta = timedelta(days=1)) -> str:
         session_id = secrets.token_urlsafe(32)
         now = datetime.now(timezone.utc)
         with self.connect() as connection:
             connection.execute("DELETE FROM sessions WHERE expires_at <= ?", (now.isoformat(),))
             connection.execute(
                 "INSERT INTO sessions (id, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
-                (session_id, user_id, now.isoformat(), (now + timedelta(days=1)).isoformat()),
+                (session_id, user_id, now.isoformat(), (now + lifetime).isoformat()),
             )
         return session_id
+
+    def count_ai_message(self, session_id: str) -> int:
+        with self.connect() as connection:
+            connection.execute(
+                "UPDATE sessions SET ai_messages = ai_messages + 1 WHERE id = ?", (session_id,)
+            )
+            row = connection.execute(
+                "SELECT ai_messages FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+        return int(row["ai_messages"])
 
     def get_session_user(self, session_id: str) -> sqlite3.Row | None:
         with self.connect() as connection:

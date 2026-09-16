@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { chat, type ChatMessage } from "@/lib/api";
+import { ApiError, chat, type ChatMessage } from "@/lib/api";
 import type { BoardData } from "@/lib/kanban";
 import { useI18n } from "@/lib/i18n";
 
@@ -35,8 +35,8 @@ export const AIChatSidebar = ({
       if (result.board) {
         onBoardUpdate(result.board);
       }
-    } catch {
-      setError(t("aiError"));
+    } catch (error) {
+      setError(t(error instanceof ApiError && error.status === 429 ? "aiLimitReached" : "aiError"));
     } finally {
       setIsSending(false);
     }

@@ -34,6 +34,9 @@ export const login = (username: string, password: string) =>
     body: JSON.stringify({ username, password }),
   });
 
+export const loginAsGuest = () =>
+  request<{ username: string }>("/api/auth/guest", { method: "POST" });
+
 export const logout = () => request<void>("/api/auth/logout", { method: "POST" });
 
 export const getCurrentUser = () =>

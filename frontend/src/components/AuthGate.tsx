@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { getCurrentUser, login, logout } from "@/lib/api";
+import { getCurrentUser, login, loginAsGuest, logout } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 
 export const AuthGate = () => {
@@ -26,6 +26,16 @@ export const AuthGate = () => {
       setStatus("signed-in");
     } catch {
       setError(t("invalidCredentials"));
+    }
+  };
+
+  const handleGuest = async () => {
+    try {
+      await loginAsGuest();
+      setError("");
+      setStatus("signed-in");
+    } catch {
+      setError(t("demoError"));
     }
   };
 
@@ -54,7 +64,18 @@ export const AuthGate = () => {
         <p className="mt-3 text-sm leading-6 text-[var(--gray-text)]">
           {t("loginPrompt")}
         </p>
-        <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+        <button
+          className="mt-8 w-full rounded-xl bg-[var(--primary-blue)] px-4 py-3 font-semibold text-white transition hover:brightness-110"
+          type="button"
+          onClick={handleGuest}
+        >
+          {t("tryDemo")}
+        </button>
+        <p className="mt-3 text-xs leading-5 text-[var(--gray-text)]">{t("demoNote")}</p>
+        <p className="mt-6 text-center text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
+          {t("or")}
+        </p>
+        <form className="mt-4 space-y-5" onSubmit={handleSubmit}>
           <div>
             <label className="text-sm font-semibold text-[var(--navy-dark)]" htmlFor="username">
               {t("username")}

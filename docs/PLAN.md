@@ -261,28 +261,28 @@ Automated tests always run against SQLite locally; Turso is exercised by the loc
 
 ### Checklist
 
-- [ ] Commit the pending working-tree changes so this phase starts from a clean `main`.
-- [ ] Add `POST /api/auth/guest`: creates a `guest-<token>` user, seeds its board with `INITIAL_BOARD`, opens a session that expires in 1 hour, and sets the same `pm_session` cookie as the login route.
-- [ ] Add `Database.delete_expired_guests()`: deletes guest users whose session expired (cascade removes sessions and boards). Call it from the guest route and from `/api/health` (Part 13).
-- [ ] Add an `ai_messages` counter to `sessions`; `/api/ai/chat` increments it and returns `429` once the per-session limit (`AI_MESSAGE_LIMIT`, default 10) is reached. Document the schema change in `docs/DATABASE.md`.
-- [ ] `AuthGate`: add a "Try the demo" button that calls the guest route, plus a note that the demo session lasts 1 hour and its data is deleted afterwards. Keep the existing username/password form.
-- [ ] `AIChatSidebar`: show a clear message when the AI limit is reached.
-- [ ] Add Spanish/English text for the new labels in `lib/i18n.tsx`.
-- [ ] Update `AGENTS.md` limitations to describe demo mode.
+- [x] Commit the pending working-tree changes so this phase starts from a clean `main`.
+- [x] Add `POST /api/auth/guest`: creates a `guest-<token>` user, seeds its board with `INITIAL_BOARD`, opens a session that expires in 1 hour, and sets the same `pm_session` cookie as the login route.
+- [x] Add `Database.delete_expired_guests()`: deletes guest users whose session expired (cascade removes sessions and boards). Call it from the guest route and from `/api/health` (Part 13).
+- [x] Add an `ai_messages` counter to `sessions`; `/api/ai/chat` increments it and returns `429` once the per-session limit (`AI_MESSAGE_LIMIT`, default 10) is reached. Document the schema change in `docs/DATABASE.md`.
+- [x] `AuthGate`: add a "Try the demo" button that calls the guest route, plus a note that the demo session lasts 1 hour and its data is deleted afterwards. Keep the existing username/password form.
+- [x] `AIChatSidebar`: show a clear message when the AI limit is reached.
+- [x] Add Spanish/English text for the new labels in `lib/i18n.tsx`.
+- [x] Update `AGENTS.md` limitations to describe demo mode.
 
 ### Tests
 
-- [ ] Backend unit: guest route creates user, board, and a session expiring in 1 hour; two guests get independent boards; expired guests are deleted with their sessions and boards; the AI route returns `429` after the limit and the counter is per session.
-- [ ] Frontend unit: `AuthGate` renders the demo button and enters the board through the guest route; `AIChatSidebar` renders the limit message on `429`.
-- [ ] Playwright mocked E2E (`tests/kanban.spec.ts`): guest flow enters the board without credentials.
-- [ ] Playwright integrated E2E (`tests/integrated/app.spec.ts`): a guest moves a card in the real container and the change survives a reload; a second guest in a fresh context does not see the first guest's change.
-- [ ] Full suites pass locally: `uv run --group dev pytest`, `npm run test:all`, and `INTEGRATED_E2E=true npx playwright test` against the Docker container.
+- [x] Backend unit: guest route creates user, board, and a session expiring in 1 hour; two guests get independent boards; expired guests are deleted with their sessions and boards; the AI route returns `429` after the limit and the counter is per session.
+- [x] Frontend unit: `AuthGate` renders the demo button and enters the board through the guest route; `AIChatSidebar` renders the limit message on `429`.
+- [x] Playwright mocked E2E (`tests/kanban.spec.ts`): guest flow enters the board without credentials.
+- [x] Playwright integrated E2E (`tests/integrated/app.spec.ts`): a guest moves a card in the real container and the change survives a reload; a second guest in a fresh context does not see the first guest's change.
+- [x] Full suites pass locally: backend pytest 16/16, Vitest 20/20, mocked Playwright 6/6, integrated Playwright 3/3 against the Docker container (real AI chat returned `200`). Also fixed the mocked Playwright run so it no longer picks up `tests/integrated/`, and added `E2E_BASE_URL` to target a container on another port.
 
-- [ ] Functional test (manual, by the user, local Docker at `http://localhost:8000`): open the app in two browsers, enter as guest in both, add and move a card in each, reload, and confirm each board is independent; send chat messages until the AI limit message appears; log in with `user`/`password` and confirm the seeded board still works.
+- [x] Functional test (manual, by the user, local Docker at `http://localhost:8000`): open the app in two browsers, enter as guest in both, add and move a card in each, reload, and confirm each board is independent; send chat messages until the AI limit message appears; log in with `user`/`password` and confirm the seeded board still works.
 
 ### Success criteria
 
-- [ ] Two visitors in separate browsers each get their own board, and a guest whose session is past 1 hour is sent back to the entry screen with its data gone from the database.
+- [x] Two visitors in separate browsers each get their own board, and a guest whose session is past 1 hour is sent back to the entry screen with its data gone from the database. Verified by the user on 2026-09-16; integrated tests now run as guests so the seeded board stays clean.
 
 ## Part 13: Turso driver and health endpoint
 

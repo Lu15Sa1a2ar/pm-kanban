@@ -29,7 +29,7 @@ To run a single Vitest file: `npx vitest run src/lib/kanban.test.ts`. To run a s
 - `uv run --group dev pytest tests/test_main.py::test_name` — run a single test
 - `uv run uvicorn app.main:app --reload` — run the backend locally
 
-Backend env vars: `OPENROUTER_API_KEY` (enables `/api/ai/connectivity` and `/api/ai/chat`), `PM_DATABASE_PATH` (override the SQLite path; default `backend/data/project-management.db`). Planned (Parts 12-13): `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (switch persistence to Turso), `AI_MESSAGE_LIMIT` (chat messages per session, default 10).
+Backend env vars: `OPENROUTER_API_KEY` (enables `/api/ai/connectivity` and `/api/ai/chat`), `PM_DATABASE_PATH` (override the SQLite path; default `backend/data/project-management.db`). `AI_MESSAGE_LIMIT` (chat messages allowed per session before `/api/ai/chat` returns 429; default 10). Planned (Part 13): `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (switch persistence to Turso).
 
 ### Docker (full stack, from repo root)
 
@@ -39,7 +39,7 @@ Backend env vars: `OPENROUTER_API_KEY` (enables `/api/ai/connectivity` and `/api
 
 ### Integrated E2E (against a running container)
 
-- `INTEGRATED_E2E=true npx playwright test` (from `frontend/`) runs `tests/integrated/` against `http://127.0.0.1:8000`. Start the container first. Planned: `E2E_BASE_URL` overrides the target so the same suite doubles as the production smoke test.
+- `INTEGRATED_E2E=true npx playwright test` (from `frontend/`) runs `tests/integrated/` against `http://127.0.0.1:8000`. Start the container first. `E2E_BASE_URL` overrides the target (another port, a Vercel preview, or production), so the same suite doubles as the production smoke test. The mocked run (`npm run test:e2e`) ignores `tests/integrated/`.
 
 ## Environments
 
@@ -84,5 +84,5 @@ Key invariant: board ownership is always resolved from the authenticated session
 - No emojis, anywhere (code, docs, commit messages).
 - When debugging, find the root cause before changing anything — don't guess-and-check.
 - Secrets (e.g. `OPENROUTER_API_KEY`, Turso tokens) live only in environment variables / `.env` / Vercel settings, never in source or commits.
-- This is an MVP: one seeded user (`user`/`password`) plus, once Part 12 lands, anonymous guest users whose board and session are deleted 1 hour after creation. One board per user. Don't build multi-board generalizations or per-user settings unless asked.
+- This is an MVP: one seeded user (`user`/`password`) plus anonymous guest users (`POST /api/auth/guest`) whose board and session are deleted 1 hour after creation. One board per user. Don't build multi-board generalizations or per-user settings unless asked.
 - Every phase in `docs/PLAN.md` ships with its unit, E2E, and integrated tests, and is checked off only after the local suites pass. Deployment work follows the same rule: verify locally, then deploy.
