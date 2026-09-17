@@ -18,7 +18,7 @@ Demo mode (for the public deployment): a visitor can enter without credentials a
 
 For the MVP, there will only be 1 Kanban board per signed in user.
 
-For the MVP, this will run locally (in a docker container)
+For the MVP, this will run locally (in a docker container). A public demo also runs on Vercel (two Services: Next.js static export and FastAPI function) with Turso as the database: https://pm-kanban-tau.vercel.app
 
 ## Technical Decisions
 

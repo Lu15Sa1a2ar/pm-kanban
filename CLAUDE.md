@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A Project Management MVP: a Kanban board app with a Next.js frontend, a FastAPI backend, SQLite persistence, and an AI chat sidebar (via OpenRouter) that can read and modify the board. Runs locally in a single Docker container, with the backend serving the statically exported frontend. A public demo deployment on Vercel + Turso is in progress (see Environments below and `docs/PLAN.md` Parts 12-15). `vercel dev -L` does not work on Windows (Vercel CLI path-escaping bug), so Vercel packaging is verified on preview deployments.
+A Project Management MVP: a Kanban board app with a Next.js frontend, a FastAPI backend, SQLite persistence, and an AI chat sidebar (via OpenRouter) that can read and modify the board. Runs locally in a single Docker container, with the backend serving the statically exported frontend. A public demo runs on Vercel + Turso at https://pm-kanban-tau.vercel.app (see Environments below and `docs/PLAN.md` Parts 12-15). `vercel dev -L` does not work on Windows (Vercel CLI path-escaping bug), so Vercel packaging is verified on preview deployments.
 
 Full product/technical decisions: `AGENTS.md`. Database schema and validation rules: `docs/DATABASE.md`. Phase-by-phase build history and the deployment plan: `docs/PLAN.md`.
 
@@ -45,12 +45,12 @@ Backend env vars: `OPENROUTER_API_KEY` (enables `/api/ai/connectivity` and `/api
 
 Two environments, always verified in this order: local first, production second. Nothing goes to production until the local checks (backend pytest, Vitest, mocked Playwright, integrated Playwright against Docker) pass.
 
-| | Local | Production (planned, `docs/PLAN.md` Parts 14-15) |
+| | Local | Production (`docs/PLAN.md` Parts 14-15) |
 |---|---|---|
 | Runtime | Docker Compose; FastAPI serves the static export at `localhost:8000` | Vercel Hobby, two Services declared in root `vercel.json`: `frontend/` (Next.js static export on the CDN) and `backend/` (FastAPI as a Python function, entrypoint `app.main:app`); `/api/*` is rewritten to the backend with the path unchanged |
 | Database | SQLite file in `backend/data/` (or Turso `pm-dev` when `TURSO_DATABASE_URL` is set in `.env`) | Turso `pm-prod` via `turso-serverless` |
-| Secrets | `.env` at repo root | Vercel Production environment variables |
-| Verification | Full automated suites | Playwright smoke run against the public URL + manual functional checklist |
+| Secrets | `.env` at repo root (points at Turso `pm-dev` when set) | Vercel environment variables: Production scope uses Turso `pm-prod`, Preview scope uses `pm-dev` |
+| Verification | Full automated suites | `E2E_BASE_URL=https://pm-kanban-tau.vercel.app INTEGRATED_E2E=true npx playwright test` + manual functional checklist |
 
 Production constraints to keep in mind when touching backend code: the function is stateless (no background tasks, no local files), so periodic work like guest cleanup runs inside request handlers and the daily Vercel Cron on `/api/health`. That cron is also what keeps the Turso Free database from being archived after 10 idle days; never remove it.
 

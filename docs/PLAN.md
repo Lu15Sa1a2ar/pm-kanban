@@ -331,23 +331,26 @@ Vercel now supports Services (several frameworks in one project, available on Ho
 
 ## Part 15: Production deployment and functional verification
 
+Public URL: https://pm-kanban-tau.vercel.app (GitHub: https://github.com/Lu15Sa1a2ar/pm-kanban).
+
 ### Checklist
 
-- [ ] Push `main` to GitHub and import the repository into Vercel (Hobby, Root Directory = repo root so `vercel.json` and both service roots are visible).
-- [ ] Set Production environment variables in Vercel: `OPENROUTER_API_KEY`, `TURSO_DATABASE_URL` (pm-prod), `TURSO_AUTH_TOKEN`, `AI_MESSAGE_LIMIT`.
-- [ ] Set a spending limit on the OpenRouter key.
-- [ ] Deploy a Vercel preview first (branch or `vercel` without `--prod`) pointed at `pm-dev`, run the smoke suite against it, then promote to production.
-- [ ] Confirm the cron job is registered in the Vercel dashboard and that its first run hits `/api/health` with `200`.
-- [ ] Update `README.md`, `CLAUDE.md`, and `AGENTS.md` with the final deployment model and the public URL.
+- [x] Push `main` to GitHub and import the repository into Vercel (Hobby, Root Directory = repo root so `vercel.json` and both service roots are visible). The original remote pointed at the course template; `origin` now points at the user's own repository.
+- [x] Set environment variables in Vercel: `OPENROUTER_API_KEY` (all scopes), `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` (Production scope: `pm-prod`; Preview scope: `pm-dev`). `AI_MESSAGE_LIMIT` left at its default of 10.
+- [x] Set a spending limit on the OpenRouter key.
+- [x] Preview before production: importing the repository deploys `main` as production immediately, so the same commit was verified directly on the production URL instead of on a separate preview; a `deploy-check` branch exists for future previews against `pm-dev`.
+- [ ] Confirm the cron job is registered in the Vercel dashboard (Settings > Cron Jobs) and that its first run (06:00 UTC) hits `/api/health` with `200`.
+- [x] Update `README.md`, `CLAUDE.md`, and `AGENTS.md` with the final deployment model and the public URL.
 
 ### Tests
 
-- [ ] Smoke E2E against production: `E2E_BASE_URL=https://<app>.vercel.app INTEGRATED_E2E=true npx playwright test` passes (guest flow, card persistence, real AI chat).
+- [x] Smoke E2E against production: `E2E_BASE_URL=https://pm-kanban-tau.vercel.app INTEGRATED_E2E=true npx playwright test` passed 3/3 (guest flow, card persistence, real AI chat).
+- [x] Direct checks on production: frontend 130 ms from the CDN; backend cold start 1.9 s on the first call, then `/api/health` 350 ms, guest login 450 ms, board load 290 ms; the 11th chat message in a session returns `429`; `/api/board` without a cookie returns `401`.
 - [ ] Manual functional checklist on the public URL, in Spanish and English: enter as guest, add/edit/move a card, rename a column, reload and confirm persistence, chat with the AI and see a board update, hit the AI limit and see the message, log out, log in as `user`/`password`, and confirm a second browser gets an independent board.
 - [ ] Wait past the 1-hour window and confirm the guest is redirected to the entry screen and its rows are gone from `pm-prod`.
-- [ ] Redeploy (empty commit) and confirm existing boards survive, which validates that state lives in Turso and not in the function.
+- [x] Redeploy (empty commit) and confirm existing boards survive, which validates that state lives in Turso and not in the function. A card saved to a guest board before pushing an empty commit was still there after the redeploy.
 
-- [ ] Functional test (manual, by the user): the checklist above on the Vercel preview URL first, then on the production URL.
+- [ ] Functional test (manual, by the user): the checklist above on the production URL.
 
 ### Success criteria
 
