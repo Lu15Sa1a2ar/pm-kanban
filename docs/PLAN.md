@@ -346,11 +346,11 @@ Public URL: https://pm-kanban-tau.vercel.app (GitHub: https://github.com/Lu15Sa1
 
 - [x] Smoke E2E against production: `E2E_BASE_URL=https://pm-kanban-tau.vercel.app INTEGRATED_E2E=true npx playwright test` passed 3/3 (guest flow, card persistence, real AI chat).
 - [x] Direct checks on production: frontend 130 ms from the CDN; backend cold start 1.9 s on the first call, then `/api/health` 350 ms, guest login 450 ms, board load 290 ms; the 11th chat message in a session returns `429`; `/api/board` without a cookie returns `401`.
-- [ ] Manual functional checklist on the public URL, in Spanish and English: enter as guest, add/edit/move a card, rename a column, reload and confirm persistence, chat with the AI and see a board update, hit the AI limit and see the message, log out, log in as `user`/`password`, and confirm a second browser gets an independent board.
+- [x] Manual functional checklist on the public URL, in Spanish and English: enter as guest, add/edit/move a card, rename a column, reload and confirm persistence, chat with the AI and see a board update, hit the AI limit and see the message, log out, log in as `user`/`password`, and confirm a second browser gets an independent board. Verified by the user on 2026-09-17; chat formatting issue logged as Part 16.
 - [ ] Wait past the 1-hour window and confirm the guest is redirected to the entry screen and its rows are gone from `pm-prod`.
 - [x] Redeploy (empty commit) and confirm existing boards survive, which validates that state lives in Turso and not in the function. A card saved to a guest board before pushing an empty commit was still there after the redeploy.
 
-- [ ] Functional test (manual, by the user): the checklist above on the production URL.
+- [x] Functional test (manual, by the user): the checklist above on the production URL. Done 2026-09-17.
 
 ### Success criteria
 
