@@ -1,5 +1,7 @@
+import importlib
 import sqlite3
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import pytest
 import turso_serverless
@@ -303,3 +305,17 @@ def test_connect_uses_sqlite_without_turso(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.delenv("TURSO_DATABASE_URL", raising=False)
 
     assert isinstance(database.connect(), sqlite3.Connection)
+
+
+def test_app_serves_api_without_static_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    import app.main as main
+
+    monkeypatch.setattr(Path, "is_dir", lambda self: False)
+    reloaded = importlib.reload(main)
+    api_only = TestClient(reloaded.app)
+
+    assert api_only.get("/api/hello").status_code == 200
+    assert api_only.get("/").status_code == 404
+
+    monkeypatch.undo()
+    importlib.reload(main)

@@ -139,5 +139,7 @@ def ai_chat(
         raise HTTPException(status_code=502, detail="AI returned an invalid board update") from error
 
 
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="legacy-static")
-app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
+# The Docker image copies the frontend export here; on Vercel the frontend is its own service.
+if STATIC_DIR.is_dir():
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="legacy-static")
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")

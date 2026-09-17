@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A Project Management MVP: a Kanban board app with a Next.js frontend, a FastAPI backend, SQLite persistence, and an AI chat sidebar (via OpenRouter) that can read and modify the board. Runs locally in a single Docker container, with the backend serving the statically exported frontend. A public demo deployment on Vercel + Turso is in progress (see Environments below and `docs/PLAN.md` Parts 12-15).
+A Project Management MVP: a Kanban board app with a Next.js frontend, a FastAPI backend, SQLite persistence, and an AI chat sidebar (via OpenRouter) that can read and modify the board. Runs locally in a single Docker container, with the backend serving the statically exported frontend. A public demo deployment on Vercel + Turso is in progress (see Environments below and `docs/PLAN.md` Parts 12-15). `vercel dev -L` does not work on Windows (Vercel CLI path-escaping bug), so Vercel packaging is verified on preview deployments.
 
 Full product/technical decisions: `AGENTS.md`. Database schema and validation rules: `docs/DATABASE.md`. Phase-by-phase build history and the deployment plan: `docs/PLAN.md`.
 
@@ -47,7 +47,7 @@ Two environments, always verified in this order: local first, production second.
 
 | | Local | Production (planned, `docs/PLAN.md` Parts 14-15) |
 |---|---|---|
-| Runtime | Docker Compose; FastAPI serves the static export at `localhost:8000` | Vercel Hobby: static export on the CDN, FastAPI as a Python function (`api/index.py`) |
+| Runtime | Docker Compose; FastAPI serves the static export at `localhost:8000` | Vercel Hobby, two Services declared in root `vercel.json`: `frontend/` (Next.js static export on the CDN) and `backend/` (FastAPI as a Python function, entrypoint `app.main:app`); `/api/*` is rewritten to the backend with the path unchanged |
 | Database | SQLite file in `backend/data/` (or Turso `pm-dev` when `TURSO_DATABASE_URL` is set in `.env`) | Turso `pm-prod` via `turso-serverless` |
 | Secrets | `.env` at repo root | Vercel Production environment variables |
 | Verification | Full automated suites | Playwright smoke run against the public URL + manual functional checklist |
@@ -56,7 +56,7 @@ Production constraints to keep in mind when touching backend code: the function 
 
 ## Architecture
 
-**Request flow**: In Docker, FastAPI serves the Next.js static export (`frontend/out`, copied to `backend/static` at build time — see `Dockerfile`) at `/`, and all API routes live under `/api/`. There is no separate frontend server in production; `npm run dev` is only for local frontend iteration against a running backend.
+**Request flow**: In Docker, FastAPI serves the Next.js static export (`frontend/out`, copied to `backend/static` at build time — see `Dockerfile`) at `/`, and all API routes live under `/api/`. The static mount is conditional on `backend/static` existing; on Vercel that directory is excluded (`.vercelignore`) and the frontend is served by its own service. `npm run dev` is only for local frontend iteration against a running backend.
 
 **Backend** (`backend/app/`):
 - `main.py` — FastAPI app, all routes (auth, board CRUD, AI chat), static file serving.

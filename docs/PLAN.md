@@ -237,7 +237,7 @@
 ## Deployment decisions (approved 2026-09-16)
 
 - Target: public demo shared on LinkedIn, hosted on free tiers only.
-- Frontend and backend both run on Vercel (Hobby plan): the Next.js static export is served from the CDN and FastAPI runs as a Python function under `api/index.py`.
+- Frontend and backend both run on Vercel (Hobby plan) as two Services in one project: the Next.js static export is served from the CDN and FastAPI runs as a Python function (`backend` service, entrypoint `app.main:app`).
 - Persistence in production moves from the SQLite file to Turso (Free plan) through the `turso-serverless` driver, which is `sqlite3`-compatible. The SQL and the one-JSON-document-per-user model stay unchanged.
 - Turso Free archives databases after 10 days of inactivity and does not unarchive them automatically. A daily Vercel Cron calling `/api/health` keeps the database active. This is mandatory, not optional.
 - Demo mode: every visitor gets an anonymous guest user with its own board and a session that expires 1 hour after creation. Expired guests (user, board, session) are deleted. The seeded `user`/`password` login stays available next to the guest button.
@@ -249,7 +249,7 @@
 
 | | Local | Production |
 |---|---|---|
-| Runtime | Docker Compose (`scripts/start.*`), FastAPI serves the static export at `http://localhost:8000` | Vercel: static export on the CDN, FastAPI as a Python function |
+| Runtime | Docker Compose (`scripts/start.*`), FastAPI serves the static export at `http://localhost:8000` | Vercel Services: static export on the CDN, FastAPI as a Python function |
 | Database | SQLite file in `backend/data/` (default), or a Turso dev database when `TURSO_DATABASE_URL` is set in `.env` | Turso database `pm-prod` |
 | Secrets | `.env` at the repo root (`OPENROUTER_API_KEY`, optional `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`) | Vercel project environment variables (Production scope) |
 | Driver selection | `Database.connect` uses `turso_serverless` when `TURSO_DATABASE_URL` is set, otherwise `sqlite3` | Always `turso_serverless` |
@@ -308,22 +308,22 @@ Automated tests always run against SQLite locally; Turso is exercised by the loc
 
 ## Part 14: Vercel packaging
 
+Vercel now supports Services (several frameworks in one project, available on Hobby). Each service builds from its own folder with its own dependencies, so the original `api/index.py` + root `requirements.txt` approach is replaced by a `services` block in `vercel.json`.
+
 ### Checklist
 
-- [ ] Add `api/index.py` at the repo root that puts `backend/` on `sys.path` and exports the FastAPI `app`.
-- [ ] Add a root `requirements.txt` (or point Vercel at `backend/pyproject.toml`) with the backend runtime dependencies.
-- [ ] Add a root `vercel.json`: build command `cd frontend && npm ci && npm run build`, output directory `frontend/out`, rewrite `/api/(.*)` to `/api/index`, and a daily cron on `/api/health`.
-- [ ] `main.py`: mount the static directory only when `backend/static` exists, so the function starts without the frontend bundle. Keep the Docker image behaviour unchanged.
-- [ ] Add `.vercelignore` to exclude `backend/data`, `backend/.venv`, `node_modules`, and test files from the function bundle.
-- [ ] Set the Playwright `baseURL` from `E2E_BASE_URL` when present so the integrated suite can target any URL.
+- [x] Add a root `vercel.json` with two services: `frontend` (root `frontend/`, Next.js static export detected automatically) and `backend` (root `backend/`, `entrypoint: "app.main:app"`, dependencies from `backend/pyproject.toml` + `uv.lock`). Top-level rewrites send `/api/(.*)` to the backend and everything else to the frontend; the backend receives the original `/api/...` path. Daily cron on `/api/health`.
+- [x] `main.py`: mount the static directory only when `backend/static` exists, so the backend service starts without the frontend bundle. The Docker image is unchanged.
+- [x] Add `.vercelignore` to keep `backend/data`, `backend/static`, tests, Docker files, and build output out of the deployment.
+- [x] Set the Playwright `baseURL` from `E2E_BASE_URL` when present so the integrated suite can target any URL (done in Part 12).
 
 ### Tests
 
-- [ ] Backend unit: the app starts and serves `/api/hello` when the static directory is missing; existing static-serving tests still pass when it is present.
-- [ ] Full suites pass locally; the Docker image still builds and serves the frontend at `/`.
-- [ ] `vercel build` (Vercel CLI) succeeds locally and its output contains the static export and the Python function.
+- [x] Backend unit: the app serves `/api/hello` and returns 404 for `/` when the static directory is missing; existing static-serving tests still pass when it is present. 20/20.
+- [x] Full suites pass locally; the Docker image still builds and serves the frontend at `/` (integrated 3/3 in SQLite mode after the change).
+- [x] `vercel dev -L` from the repo root detects both services (`frontend [Next.js]`, `backend [FastAPI]`, entrypoint resolved to `backend/app/main.py`) and installs the backend dependencies with uv. Starting the Python dev server fails on Windows because of a Vercel CLI bug (an unescaped `C:\Users` path is written into a generated Python file), and `vercel build` requires a linked project. The runtime check of the packaging therefore happens on the Vercel preview deployment in Part 15, before anything reaches production.
 
-- [ ] Functional test (manual, by the user, local Docker): restart the container after the packaging changes and repeat the guest flow, the chat, and the language switch to confirm nothing changed locally.
+- [x] Functional test (manual, by the user, local Docker): restart the container after the packaging changes and repeat the guest flow, the chat, and the language switch to confirm nothing changed locally. Verified by the user on 2026-09-16.
 
 ### Success criteria
 
@@ -333,7 +333,7 @@ Automated tests always run against SQLite locally; Turso is exercised by the loc
 
 ### Checklist
 
-- [ ] Push `main` to GitHub and import the repository into Vercel (Hobby, Root Directory = repo root).
+- [ ] Push `main` to GitHub and import the repository into Vercel (Hobby, Root Directory = repo root so `vercel.json` and both service roots are visible).
 - [ ] Set Production environment variables in Vercel: `OPENROUTER_API_KEY`, `TURSO_DATABASE_URL` (pm-prod), `TURSO_AUTH_TOKEN`, `AI_MESSAGE_LIMIT`.
 - [ ] Set a spending limit on the OpenRouter key.
 - [ ] Deploy a Vercel preview first (branch or `vercel` without `--prod`) pointed at `pm-dev`, run the smoke suite against it, then promote to production.

@@ -1,0 +1,13 @@
+backend/data
+backend/.venv
+backend/tests
+backend/static
+frontend/node_modules
+frontend/.next
+frontend/out
+frontend/test-results
+frontend/tests
+docs
+scripts
+Dockerfile
+docker-compose.yml
