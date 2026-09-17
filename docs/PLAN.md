@@ -355,3 +355,25 @@ Public URL: https://pm-kanban-tau.vercel.app (GitHub: https://github.com/Lu15Sa1
 ### Success criteria
 
 - [ ] The public URL loads in under 3 seconds on a cold start, every feature in the manual checklist works, no credentials are needed to try the demo, and a day later the database is still active because the cron ran.
+
+## Part 16: Chat response formatting
+
+Found by the user during the Part 15 functional test: a long assistant answer (Markdown with headings, a table, and lists) is rendered as one unbroken paragraph. Root cause: `AIChatSidebar` puts each message in a `<p>` that neither preserves newlines nor renders Markdown, and the system prompt in `ai.py` does not constrain the answer format, so the model writes Markdown meant for a wide document.
+
+### Checklist
+
+- [ ] `ai.py` system prompt: ask for short, plain-text answers suited to a narrow sidebar (short paragraphs and simple `-` lists, no headings or tables), and to keep answers about the board concise.
+- [ ] `AIChatSidebar`: render assistant messages with a lightweight Markdown renderer (`react-markdown`, no plugins) so paragraphs, lists, and bold text display correctly; keep user messages as plain text. Preserve newlines as a fallback (`whitespace-pre-wrap`).
+- [ ] Keep the sidebar readable on narrow screens: long lists wrap, no horizontal scroll.
+
+### Tests
+
+- [ ] Frontend unit: an assistant message with two paragraphs and a list renders as separate paragraphs and list items; a user message with Markdown syntax is shown verbatim.
+- [ ] Backend unit: the system prompt sent to OpenRouter contains the formatting instruction (captured through the existing `httpx.post` monkeypatch).
+- [ ] Integrated Playwright against local Docker: ask the assistant to explain the board and confirm the answer contains more than one rendered block.
+- [ ] Full suites pass locally; verify on Docker first, then on production after the deploy.
+- [ ] Functional test (manual, by the user, local Docker then production): ask "explícame el tablero" in Spanish and English and confirm the answer is readable, with line breaks and lists, on desktop and on a phone-width window.
+
+### Success criteria
+
+- [ ] Assistant answers in the sidebar are formatted and readable, and the model no longer produces headings or tables in its replies.
