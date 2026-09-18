@@ -38,7 +38,27 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Project Management MVP API", version="0.1.0", lifespan=lifespan)
+def api_docs_urls() -> dict[str, str | None]:
+    """The interactive docs are for local development only."""
+    hidden = is_production()
+    return {
+        "docs_url": None if hidden else "/docs",
+        "redoc_url": None if hidden else "/redoc",
+        "openapi_url": None if hidden else "/openapi.json",
+    }
+
+
+app = FastAPI(
+    title="Project Management MVP API", version="0.1.0", lifespan=lifespan, **api_docs_urls()
+)
+
+
+@app.middleware("http")
+async def no_store_api_responses(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 @app.get("/api/hello")

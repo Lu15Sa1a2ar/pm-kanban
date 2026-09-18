@@ -62,7 +62,7 @@ Production constraints to keep in mind when touching backend code: the function 
 - `main.py` — FastAPI app, all routes (auth, board CRUD, AI chat), static file serving.
 - `database.py` — init/seeding, password hashing, session management, guest lifecycle, board persistence. Owns the only path that touches the database; the SQLite/Turso driver switch lives in `Database.connect` and nowhere else.
 - `schemas.py` — Pydantic models validating the full board document (columns, cards, ordering) before anything is persisted.
-- `ai.py` — OpenRouter client (`openai/gpt-oss-120b` model), builds structured requests/responses for the chat feature.
+- `ai.py` — OpenRouter client (`openai/gpt-oss-120b` model), builds structured requests/responses for the chat feature. The board goes to the model inside `<board_data>` tags that the system prompt declares as data, never instructions; `trim_conversation` bounds the question and history (`MAX_MESSAGE_CHARS`, `MAX_HISTORY_TURNS`).
 
 Key invariant: board ownership is always resolved from the authenticated session server-side — routes never trust a client-supplied user ID. The board is stored as one validated JSON document per user (see `docs/DATABASE.md` for the schema and validation rules — e.g. every card belongs to exactly one column, IDs are unique and stable).
 
@@ -86,5 +86,6 @@ Key invariant: board ownership is always resolved from the authenticated session
 - Secrets (e.g. `OPENROUTER_API_KEY`, Turso tokens) live only in environment variables / `.env` / Vercel settings, never in source or commits.
 - This is an MVP: one seeded user (`user`/`password`, local only; production never creates it) plus anonymous guest users (`POST /api/auth/guest`) whose board and session are deleted 1 hour after creation. One board per user. Don't build multi-board generalizations or per-user settings unless asked.
 - Every phase in `docs/PLAN.md` ships with its unit, E2E, and integrated tests, and is checked off only after the local suites pass. Deployment work follows the same rule: verify locally, then deploy.
+- Security headers (CSP, nosniff, referrer policy, HSTS) live in the top-level `headers` of `vercel.json`; `script-src` needs `'unsafe-inline'` because of the Next.js export. Every `/api/` response is `Cache-Control: private, no-store` (middleware in `main.py`). `/docs`, `/redoc` and `/openapi.json` exist only outside production.
 - Error bodies never carry upstream detail: AI and database failures are logged server-side (`logger.warning`) and surface as generic messages. Secrets are scanned in CI (`.github/workflows/secret-scan.yml`, gitleaks).
 - The integrated Playwright suite must create at most 5 guests per run (the per-IP rate limit); share browser contexts between assertions instead of adding guest logins.

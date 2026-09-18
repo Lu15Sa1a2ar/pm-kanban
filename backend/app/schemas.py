@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -47,11 +49,15 @@ class LoginRequest(BaseModel):
 
 
 class ChatMessage(BaseModel):
-    role: str
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
     content: str
 
 
 class ChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     question: str = Field(min_length=1)
     history: list[ChatMessage] = Field(default_factory=list)
 

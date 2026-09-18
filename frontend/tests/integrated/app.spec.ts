@@ -101,3 +101,18 @@ test("gives each guest an independent board that survives a reload", async ({ br
   await first.close();
   await second.close();
 });
+
+test("api responses are never cached and production sends the security headers", async ({ request, baseURL }) => {
+  const api = await request.get("/api/health");
+  expect(api.headers()["cache-control"]).toContain("no-store");
+
+  // The security headers come from vercel.json, so they only exist on Vercel deployments.
+  test.skip(!baseURL!.startsWith("https://"), "headers are added by Vercel, not by the container");
+  const page = await request.get("/");
+  const headers = page.headers();
+  expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+  expect(headers["content-security-policy"]).toContain("connect-src 'self'");
+  expect(headers["x-content-type-options"]).toBe("nosniff");
+  expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+  expect(headers["strict-transport-security"]).toContain("max-age=");
+});
