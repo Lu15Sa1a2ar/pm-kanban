@@ -457,3 +457,4 @@ def test_plain_text_completion_becomes_a_text_only_reply(monkeypatch: pytest.Mon
     assert response.json() == {"response": "El tablero tiene cinco columnas.", "board": None}
     assert client.get("/api/board").json() == before
     assert captured["provider"] == {"require_parameters": True, "ignore": ["DeepInfra"]}
+    assert captured["reasoning"] == {"effort": "low"}

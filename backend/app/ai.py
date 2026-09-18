@@ -179,6 +179,9 @@ def ask_openrouter_structured(
         # OpenRouter spreads this model across providers; only those honouring
         # response_format may serve it, and DeepInfra claims to but returns plain text.
         "provider": {"require_parameters": True, "ignore": ["DeepInfra"]},
+        # Short internal reasoning: faster, cheaper, and fewer empty completions from
+        # providers that mishandle long reasoning output.
+        "reasoning": {"effort": "low"},
         "response_format": {
             "type": "json_schema",
             "json_schema": {"name": "kanban_assistant", "strict": True, "schema": RESPONSE_SCHEMA},
