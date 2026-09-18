@@ -29,7 +29,7 @@ To run a single Vitest file: `npx vitest run src/lib/kanban.test.ts`. To run a s
 - `uv run --group dev pytest tests/test_main.py::test_name` — run a single test
 - `uv run uvicorn app.main:app --reload` — run the backend locally
 
-Backend env vars: `OPENROUTER_API_KEY` (enables `/api/ai/connectivity` and `/api/ai/chat`), `PM_DATABASE_PATH` (override the SQLite path; default `backend/data/project-management.db`). `AI_MESSAGE_LIMIT` (chat messages allowed per session before `/api/ai/chat` returns 429; default 10). `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` switch persistence to Turso through `turso-serverless`; leave them unset (or empty) for SQLite. Every Turso statement is one HTTPS round trip, so keep the number of statements per request low and do related writes in one `with database.connect()` block.
+Backend env vars: `OPENROUTER_API_KEY` (enables `/api/ai/connectivity` and `/api/ai/chat`), `PM_DATABASE_PATH` (override the SQLite path; default `backend/data/project-management.db`). `AI_MESSAGE_LIMIT` (chat messages per session, default 10) and `AI_DAILY_LIMIT` (across all sessions per UTC day, default 200; `/api/ai/chat` returns 429 with detail `ai_session_limit` / `ai_daily_limit`), `GUEST_RATE_LIMIT` (guests per client IP per hour, default 5), `MAX_BOARD_BYTES` (PUT body cap, default 256 KB), `CRON_SECRET` (the Vercel cron sends it as `Authorization: Bearer`; only then does `/api/health` delete expired guests), `PRODUCTION=1` (or Vercel's own `VERCEL_ENV=production`: no seeded `user` account, `Secure` cookie). See `.env.example`. `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` switch persistence to Turso through `turso-serverless`; leave them unset (or empty) for SQLite. Every Turso statement is one HTTPS round trip, so keep the number of statements per request low and do related writes in one `with database.connect()` block.
 
 ### Docker (full stack, from repo root)
 
@@ -84,5 +84,7 @@ Key invariant: board ownership is always resolved from the authenticated session
 - No emojis, anywhere (code, docs, commit messages).
 - When debugging, find the root cause before changing anything — don't guess-and-check.
 - Secrets (e.g. `OPENROUTER_API_KEY`, Turso tokens) live only in environment variables / `.env` / Vercel settings, never in source or commits.
-- This is an MVP: one seeded user (`user`/`password`) plus anonymous guest users (`POST /api/auth/guest`) whose board and session are deleted 1 hour after creation. One board per user. Don't build multi-board generalizations or per-user settings unless asked.
+- This is an MVP: one seeded user (`user`/`password`, local only; production never creates it) plus anonymous guest users (`POST /api/auth/guest`) whose board and session are deleted 1 hour after creation. One board per user. Don't build multi-board generalizations or per-user settings unless asked.
 - Every phase in `docs/PLAN.md` ships with its unit, E2E, and integrated tests, and is checked off only after the local suites pass. Deployment work follows the same rule: verify locally, then deploy.
+- Error bodies never carry upstream detail: AI and database failures are logged server-side (`logger.warning`) and surface as generic messages. Secrets are scanned in CI (`.github/workflows/secret-scan.yml`, gitleaks).
+- The integrated Playwright suite must create at most 5 guests per run (the per-IP rate limit); share browser contexts between assertions instead of adding guest logins.

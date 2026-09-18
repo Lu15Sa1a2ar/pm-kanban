@@ -4,23 +4,23 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class Card(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    details: str
+    id: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=200)
+    details: str = Field(max_length=2000)
 
 
 class Column(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    cardIds: list[str]
+    id: str = Field(min_length=1, max_length=64)
+    title: str = Field(min_length=1, max_length=200)
+    cardIds: list[str] = Field(max_length=200)
 
 
 class BoardData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    columns: list[Column] = Field(min_length=1)
+    columns: list[Column] = Field(min_length=1, max_length=20)
     cards: dict[str, Card]
 
     @model_validator(mode="after")

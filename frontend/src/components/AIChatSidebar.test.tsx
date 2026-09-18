@@ -35,7 +35,7 @@ describe("AIChatSidebar", () => {
   });
 
   it("tells the user when the AI message limit is reached", async () => {
-    vi.mocked(chat).mockRejectedValueOnce(new ApiError(429, "AI message limit reached for this session"));
+    vi.mocked(chat).mockRejectedValueOnce(new ApiError(429, "ai_session_limit"));
     render(<AIChatSidebar onBoardUpdate={vi.fn()} />);
 
     await userEvent.type(screen.getByLabelText("AI question"), "One more");
@@ -43,6 +43,18 @@ describe("AIChatSidebar", () => {
 
     expect(
       await screen.findByText("You have reached the AI message limit for this session.")
+    ).toBeInTheDocument();
+  });
+
+  it("tells the user when the daily AI budget is exhausted", async () => {
+    vi.mocked(chat).mockRejectedValueOnce(new ApiError(429, "ai_daily_limit"));
+    render(<AIChatSidebar onBoardUpdate={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText("AI question"), "Hello");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(
+      await screen.findByText("The AI assistant has reached its daily limit. Try again tomorrow.")
     ).toBeInTheDocument();
   });
 

@@ -66,7 +66,8 @@ class Database:
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
-    def initialize(self) -> None:
+    def initialize(self, seed_user: bool = True) -> None:
+        """Create tables and, outside production, the local `user`/`password` account."""
         with self.connect() as connection:
             connection.executescript(
                 """
@@ -89,6 +90,14 @@ class Database:
                     expires_at TEXT NOT NULL,
                     ai_messages INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS guest_signups (
+                    ip TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS ai_usage (
+                    day TEXT PRIMARY KEY,
+                    count INTEGER NOT NULL DEFAULT 0
+                );
                 """
             )
             session_columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
@@ -96,6 +105,9 @@ class Database:
                 connection.execute(
                     "ALTER TABLE sessions ADD COLUMN ai_messages INTEGER NOT NULL DEFAULT 0"
                 )
+            if not seed_user:
+                connection.execute("DELETE FROM users WHERE username = ?", ("user",))
+                return
             user = connection.execute(
                 "SELECT id FROM users WHERE username = ?", ("user",)
             ).fetchone()
@@ -118,15 +130,28 @@ class Database:
                 "SELECT * FROM users WHERE username = ?", (username,)
             ).fetchone()
 
-    def create_guest(self, lifetime: timedelta) -> dict[str, str]:
+    def create_guest(self, lifetime: timedelta, ip: str, rate_limit: int) -> dict[str, str] | None:
         """Create a guest user, its board, and its session in one transaction.
 
+        Returns None when `ip` already created `rate_limit` guests in the last hour.
         Expired guests are removed first so demo data never outlives its session.
         """
-        username = f"guest-{secrets.token_urlsafe(8)}"
+        username = f"guest-{secrets.token_urlsafe(32)}"
         session_id = secrets.token_urlsafe(32)
         now = datetime.now(timezone.utc)
         with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM guest_signups WHERE created_at <= ?",
+                ((now - timedelta(hours=1)).isoformat(),),
+            )
+            signups = connection.execute(
+                "SELECT COUNT(*) FROM guest_signups WHERE ip = ?", (ip,)
+            ).fetchone()[0]
+            if signups >= rate_limit:
+                return None
+            connection.execute(
+                "INSERT INTO guest_signups (ip, created_at) VALUES (?, ?)", (ip, now.isoformat())
+            )
             self._delete_expired_guests(connection, now.isoformat())
             cursor = connection.execute(
                 "INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)",
@@ -169,15 +194,27 @@ class Database:
             )
         return session_id
 
-    def count_ai_message(self, session_id: str) -> int:
+    def count_ai_message(self, session_id: str) -> tuple[int, int]:
+        """Record one chat message; returns (messages in this session, messages today)."""
+        day = datetime.now(timezone.utc).date().isoformat()
         with self.connect() as connection:
             connection.execute(
                 "UPDATE sessions SET ai_messages = ai_messages + 1 WHERE id = ?", (session_id,)
             )
-            row = connection.execute(
+            connection.execute(
+                """
+                INSERT INTO ai_usage (day, count) VALUES (?, 1)
+                ON CONFLICT(day) DO UPDATE SET count = count + 1
+                """,
+                (day,),
+            )
+            session_count = connection.execute(
                 "SELECT ai_messages FROM sessions WHERE id = ?", (session_id,)
-            ).fetchone()
-        return int(row["ai_messages"])
+            ).fetchone()["ai_messages"]
+            daily_count = connection.execute(
+                "SELECT count FROM ai_usage WHERE day = ?", (day,)
+            ).fetchone()["count"]
+        return int(session_count), int(daily_count)
 
     def get_session_user(self, session_id: str) -> sqlite3.Row | None:
         with self.connect() as connection:

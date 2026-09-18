@@ -83,6 +83,16 @@ test("gives each guest an independent board that survives a reload", async ({ br
   await expect(secondPage.locator('[data-testid^="column-"]')).toHaveCount(5);
   await expect(secondPage.getByText(cardTitle)).toHaveCount(0);
 
+  // The second guest replays the first guest's document, ids included, through its own session.
+  const boardA = await (await first.request.get("/api/board")).json();
+  const tampered = structuredClone(boardA);
+  tampered.cards["injected"] = { id: "injected", title: "pwned", details: "" };
+  tampered.columns[0].cardIds.push("injected");
+  expect((await second.request.put("/api/board", { data: tampered })).status()).toBe(200);
+  expect(await (await first.request.get("/api/board")).json()).toEqual(boardA);
+  await firstPage.reload();
+  await expect(firstPage.getByText("pwned")).toHaveCount(0);
+
   await first.close();
   await second.close();
 });

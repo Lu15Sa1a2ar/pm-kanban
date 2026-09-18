@@ -36,7 +36,11 @@ export const AIChatSidebar = ({
         onBoardUpdate(result.board);
       }
     } catch (error) {
-      setError(t(error instanceof ApiError && error.status === 429 ? "aiLimitReached" : "aiError"));
+      if (error instanceof ApiError && error.status === 429) {
+        setError(t(error.message === "ai_daily_limit" ? "aiDailyLimitReached" : "aiLimitReached"));
+      } else {
+        setError(t("aiError"));
+      }
     } finally {
       setIsSending(false);
     }

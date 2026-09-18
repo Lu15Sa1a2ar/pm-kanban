@@ -6,7 +6,9 @@ Use SQLite as the local database. Store each user's Kanban board as one validate
 
 Authentication records are stored in SQLite. The MVP seeds one user named `user`; the password is stored as a password hash, never as plaintext. The application may continue to use the agreed `user` / `password` seed credentials while the backend authentication route is introduced.
 
-Demo mode adds guest users: `POST /api/auth/guest` inserts a `guest-<random>` user with an unguessable password hash, its own initial board, and a session that expires 1 hour after creation. Guest users whose session is no longer valid are deleted (the foreign keys cascade to their board and sessions) whenever a new guest is created.
+Demo mode adds guest users: `POST /api/auth/guest` inserts a `guest-<random>` user with an unguessable password hash, its own initial board, and a session that expires 1 hour after creation. Guest users whose session is no longer valid are deleted (the foreign keys cascade to their board and sessions) whenever a new guest is created, and by the daily cron when it calls `/api/health` with `Authorization: Bearer $CRON_SECRET`. A request that already carries a valid session gets that session back instead of a new guest, and one client IP (first value of `x-forwarded-for`) can create at most `GUEST_RATE_LIMIT` guests per hour (default 5).
+
+Seed account decision (Part 17): the `user` / `password` account exists only outside production. `Database.initialize(seed_user=False)` runs when `PRODUCTION=1` or `VERCEL_ENV=production`; it skips the seed and deletes the account if an earlier deployment created it. The login form stays visible in production and simply rejects those credentials.
 
 ## Tables
 
@@ -29,6 +31,24 @@ Demo mode adds guest users: `POST /api/auth/guest` inserts a `guest-<random>` us
 | `updated_at` | TEXT | Required ISO-8601 timestamp |
 
 A unique `user_id` means the MVP has one board per user while allowing the relationship to evolve later.
+
+### `guest_signups`
+
+| Column | Type | Constraints |
+| --- | --- | --- |
+| `ip` | TEXT | Required client IP |
+| `created_at` | TEXT | Required ISO-8601 timestamp |
+
+One row per guest created; rows older than an hour are deleted on the next guest creation. Used only for the per-IP rate limit, independently of the `users` rows.
+
+### `ai_usage`
+
+| Column | Type | Constraints |
+| --- | --- | --- |
+| `day` | TEXT | Primary key, UTC date `YYYY-MM-DD` |
+| `count` | INTEGER | Required, chat messages sent that day across all sessions |
+
+`/api/ai/chat` upserts this row on every call; once `count` exceeds `AI_DAILY_LIMIT` (default 200) the route returns `429` with detail `ai_daily_limit`, in addition to the per-session limit (`ai_session_limit`).
 
 ### `sessions`
 
@@ -82,10 +102,12 @@ Two Turso databases exist: `pm-dev` (local verification and Vercel previews) and
 
 Validation rules:
 
-- `columns` is a non-empty array with unique IDs.
-- Each column has a non-empty `id` and `title`, plus an ordered `cardIds` array.
+- `columns` is a non-empty array with unique IDs, at most 20 columns.
+- Each column has a non-empty `id` and `title` (max 64 and 200 characters), plus an ordered `cardIds` array of at most 200 entries.
 - `cards` is an object keyed by unique card IDs.
-- Every card has an `id`, `title`, and `details`; the object key must equal the card ID.
+- Every card has an `id` (max 64), `title` (1-200 characters), and `details` (max 2000); the object key must equal the card ID.
+- The whole `PUT /api/board` body is rejected with `413` above `MAX_BOARD_BYTES` (default 256 KB) before it is parsed.
+- AI updates go through the same schema and, in addition, must keep exactly the caller's current column ids in order: the model may rename columns and move cards, never add or remove columns.
 - Every card appears in exactly one column's `cardIds` array.
 - No column references a missing card.
 - Card and column IDs are stable across edits and moves.

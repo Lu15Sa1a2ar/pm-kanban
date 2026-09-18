@@ -1,7 +1,5 @@
-import importlib
 import sqlite3
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import pytest
 import turso_serverless
@@ -267,13 +265,14 @@ def test_initialize_adds_ai_messages_to_existing_sessions_table(tmp_path) -> Non
     assert "ai_messages" in columns
 
 
-def test_health_checks_database_and_removes_expired_guests() -> None:
+def test_health_checks_database_and_removes_expired_guests(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TestClient(app)
     client.post("/api/auth/guest")
     with database.connect() as connection:
         connection.execute("UPDATE sessions SET expires_at = ?", (utc_now(),))
 
-    response = TestClient(app).get("/api/health")
+    monkeypatch.setenv("CRON_SECRET", "s3cret")
+    response = TestClient(app).get("/api/health", headers={"Authorization": "Bearer s3cret"})
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -307,15 +306,15 @@ def test_connect_uses_sqlite_without_turso(monkeypatch: pytest.MonkeyPatch) -> N
     assert isinstance(database.connect(), sqlite3.Connection)
 
 
-def test_app_serves_api_without_static_directory(monkeypatch: pytest.MonkeyPatch) -> None:
-    import app.main as main
+def test_frontend_is_only_mounted_when_the_directory_exists(tmp_path) -> None:
+    from fastapi import FastAPI
 
-    monkeypatch.setattr(Path, "is_dir", lambda self: False)
-    reloaded = importlib.reload(main)
-    api_only = TestClient(reloaded.app)
+    from app.main import STATIC_DIR, mount_frontend
 
-    assert api_only.get("/api/hello").status_code == 200
-    assert api_only.get("/").status_code == 404
+    api_only = FastAPI()
+    mount_frontend(api_only, tmp_path / "missing")
+    assert TestClient(api_only).get("/").status_code == 404
 
-    monkeypatch.undo()
-    importlib.reload(main)
+    with_frontend = FastAPI()
+    mount_frontend(with_frontend, STATIC_DIR)
+    assert TestClient(with_frontend).get("/").status_code == 200

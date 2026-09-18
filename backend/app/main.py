@@ -1,9 +1,10 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from pathlib import Path
 
-from fastapi import Cookie, FastAPI, HTTPException, Response, status
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.staticfiles import StaticFiles
 
 from app.ai import (
@@ -20,11 +21,20 @@ STATIC_DIR = BASE_DIR / "static"
 SESSION_COOKIE = "pm_session"
 GUEST_SESSION_LIFETIME = timedelta(hours=1)
 database = Database()
+logger = logging.getLogger(__name__)
+
+
+def is_production() -> bool:
+    return os.getenv("PRODUCTION") == "1" or os.getenv("VERCEL_ENV") == "production"
+
+
+def env_int(name: str, default: int) -> int:
+    return int(os.getenv(name, str(default)))
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    database.initialize()
+    database.initialize(seed_user=not is_production())
     yield
 
 
@@ -37,11 +47,32 @@ def hello() -> dict[str, str]:
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
+def health(authorization: str | None = Header(default=None)) -> dict[str, str]:
+    """Keeps the database active; the cleanup only runs for the Vercel cron (CRON_SECRET)."""
     with database.connect() as connection:
         connection.execute("SELECT 1").fetchone()
-    database.delete_expired_guests()
+    if authorization is not None:
+        secret = os.getenv("CRON_SECRET")
+        if not secret or authorization != f"Bearer {secret}":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        database.delete_expired_guests()
     return {"status": "ok"}
+
+
+def set_session_cookie(response: Response, session_id: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE, session_id, httponly=True, secure=is_production(), samesite="lax", path="/"
+    )
+
+
+def client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+
+
+async def limit_board_size(request: Request) -> None:
+    if len(await request.body()) > env_int("MAX_BOARD_BYTES", 256 * 1024):
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Board is too large")
 
 
 def authenticated_user(session_id: str | None) -> dict[str, object]:
@@ -58,14 +89,27 @@ def login(credentials: LoginRequest, response: Response) -> dict[str, str]:
     user = database.find_user(credentials.username)
     if user is None or not verify_password(credentials.password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    response.set_cookie(SESSION_COOKIE, database.create_session(user["id"]), httponly=True, samesite="lax")
+    set_session_cookie(response, database.create_session(user["id"]))
     return {"username": user["username"]}
 
 
 @app.post("/api/auth/guest")
-def guest(response: Response) -> dict[str, str]:
-    guest = database.create_guest(GUEST_SESSION_LIFETIME)
-    response.set_cookie(SESSION_COOKIE, guest["session_id"], httponly=True, samesite="lax")
+def guest(
+    request: Request,
+    response: Response,
+    session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+) -> dict[str, str]:
+    current = database.get_session_user(session_id) if session_id else None
+    if current is not None:
+        return {"username": str(current["username"])}
+    guest = database.create_guest(
+        GUEST_SESSION_LIFETIME, client_ip(request), env_int("GUEST_RATE_LIMIT", 5)
+    )
+    if guest is None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many demo sessions, try later"
+        )
+    set_session_cookie(response, guest["session_id"])
     return {"username": guest["username"]}
 
 
@@ -88,7 +132,7 @@ def read_board(session_id: str | None = Cookie(default=None, alias=SESSION_COOKI
     return database.get_board(int(user["id"]))
 
 
-@app.put("/api/board", response_model=BoardData)
+@app.put("/api/board", response_model=BoardData, dependencies=[Depends(limit_board_size)])
 def write_board(
     board: BoardData,
     session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE),
@@ -103,10 +147,15 @@ def ai_connectivity(session_id: str | None = Cookie(default=None, alias=SESSION_
     authenticated_user(session_id)
     try:
         return {"answer": ask_openrouter("What is 2+2? Reply with only the number.")}
-    except AIConfigurationError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-    except AIRequestError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
+    except (AIConfigurationError, AIRequestError) as error:
+        raise ai_error(error) from error
+
+
+def ai_error(error: Exception) -> HTTPException:
+    logger.warning("AI request failed", exc_info=error)
+    if isinstance(error, AIConfigurationError):
+        return HTTPException(status_code=503, detail="AI assistant is not configured")
+    return HTTPException(status_code=502, detail="AI assistant request failed")
 
 
 @app.post("/api/ai/chat", response_model=ChatResponse)
@@ -115,11 +164,11 @@ def ai_chat(
     session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE),
 ) -> ChatResponse:
     user = authenticated_user(session_id)
-    if database.count_ai_message(str(session_id)) > int(os.getenv("AI_MESSAGE_LIMIT", "10")):
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="AI message limit reached for this session",
-        )
+    session_count, daily_count = database.count_ai_message(str(session_id))
+    if session_count > env_int("AI_MESSAGE_LIMIT", 10):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="ai_session_limit")
+    if daily_count > env_int("AI_DAILY_LIMIT", 200):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="ai_daily_limit")
     current_board = database.get_board(int(user["id"]))
     try:
         result = ask_openrouter_structured(
@@ -129,17 +178,23 @@ def ai_chat(
         )
         updated_board = BoardData.model_validate(result["board"]) if result.get("board") else None
         if updated_board:
+            # The model may rename columns and move cards, never add or remove columns.
+            if [c.id for c in updated_board.columns] != [c["id"] for c in current_board["columns"]]:
+                raise ValueError("AI changed the column set")
             database.save_board(int(user["id"]), updated_board.model_dump())
         return ChatResponse(response=result["response"], board=updated_board)
-    except AIConfigurationError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-    except AIRequestError as error:
-        raise HTTPException(status_code=502, detail=str(error)) from error
+    except (AIConfigurationError, AIRequestError) as error:
+        raise ai_error(error) from error
     except ValueError as error:
+        logger.warning("AI returned an invalid board update", exc_info=error)
         raise HTTPException(status_code=502, detail="AI returned an invalid board update") from error
 
 
-# The Docker image copies the frontend export here; on Vercel the frontend is its own service.
-if STATIC_DIR.is_dir():
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="legacy-static")
-    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="frontend")
+def mount_frontend(app: FastAPI, directory: Path) -> None:
+    """The Docker image copies the frontend export here; on Vercel the frontend is its own service."""
+    if directory.is_dir():
+        app.mount("/static", StaticFiles(directory=directory), name="legacy-static")
+        app.mount("/", StaticFiles(directory=directory, html=True), name="frontend")
+
+
+mount_frontend(app, STATIC_DIR)
