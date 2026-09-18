@@ -2,10 +2,10 @@
 
 ## Working agreement
 
-- [ ] User reviews and approves this plan before implementation begins.
-- [ ] Each phase is implemented in small changes and checked off only after its tests and success criteria pass.
-- [ ] Existing user changes are preserved; unrelated refactors are out of scope.
-- [ ] Secrets remain in environment variables and are never committed.
+- [x] User reviews and approves this plan before implementation begins.
+- [x] Each phase is implemented in small changes and checked off only after its tests and success criteria pass.
+- [x] Existing user changes are preserved; unrelated refactors are out of scope.
+- [x] Secrets remain in environment variables and are never committed. Checked against the full history on 2026-09-16 before the repository was made public.
 
 ## Approved product decisions
 
@@ -327,7 +327,7 @@ Vercel now supports Services (several frameworks in one project, available on Ho
 
 ### Success criteria
 
-- [ ] The repository is deployable to Vercel as-is from `main`, with no change to how the local Docker environment runs.
+- [x] The repository is deployable to Vercel as-is from `main`, with no change to how the local Docker environment runs. Proven by the production deployment in Part 15.
 
 ## Part 15: Production deployment and functional verification
 
