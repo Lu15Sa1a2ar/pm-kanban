@@ -465,6 +465,226 @@ Items already satisfied by the code as of `02063dd`, to be confirmed by tests ra
 
 Items known to be missing today: `Secure` cookie flag, guest rate limit and session reuse, daily AI budget, `CRON_SECRET` on health cleanup, board size caps, generic error bodies, `.env.example`, secret scan in CI, prompt delimiters, input truncation, security headers, `Cache-Control` on `/api/`, `/docs` and `/openapi.json` exposed in production, preview Deployment Protection, Dependabot.
 
+## Part 19: Front redesign, welcome panel and footer
+
+The design is approved. This phase applies it to the existing components without changing any behaviour that already works: the board still drags, the cards still edit inline, the copilot still returns structured updates, and the guest flow is untouched. The palette is the one already in the app; the only new meaning is the role given to the purple. Part 16 (chat response formatting) already landed in `AIChatSidebar` and `AssistantMessage.tsx`, and the Markdown rules from Part 18 (no images, no `rehype-raw`, http/https links only) are already satisfied there; the copilot panel work below must keep them intact.
+
+### Checklist
+
+**Tokens**
+
+- [ ] Add the palette in Appendix A as CSS variables in `globals.css` and expose them through the Tailwind theme. Read the existing values first: most of these already exist under some name (`--accent-yellow`, `--primary-blue`, `--secondary-purple`, `--navy-dark`, `--gray-text`, `--surface`, `--surface-strong`, `--stroke`, `--shadow`), so reuse the existing variable rather than adding a duplicate.
+- [ ] Add `--copilot` (#7A3E9D), `--copilot-bg` (#F3E8FA) and `--copilot-text` (#5B2A78). These are the only genuinely new tokens.
+- [ ] Change the card detail colour to `#627D98`. The current gold tone sits near 3:1 on white and fails the contrast floor for text that size.
+- [ ] Confirm which font family is actually loaded. The mockups use Plus Jakarta Sans, matched by eye from the screenshots; the app already loads Manrope (`--font-body`) and Space Grotesk (`--font-display`) through `next/font` in `layout.tsx`, so keep them and ignore the mockup's font.
+
+**Entry screen (`AuthGate`)**
+
+- [ ] Replace the single centred card with a two-column layout: content on the left, the access card on the right. Below 1024px the two stack, content first.
+- [ ] Left column: eyebrow, `Kanban Studio`, two short paragraphs, a sample exchange with the copilot showing two cards carrying the purple marker, three things to try, and the stack line with the source link.
+- [ ] Right column: keep `Try the demo` as the primary blue button and the one-hour note underneath, keep the `OR` divider and the username and password fields.
+- [ ] `Sign in` becomes an outlined button (border `#BCCCDC`, text `#102A43`). It gives up the purple and stops competing with `Try the demo`, which is the primary path.
+- [ ] Move the EN/ES toggle into the access card header so it is visible without scrolling on a phone.
+
+**Welcome panel (new component)**
+
+- [ ] Add `WelcomePanel`: a modal shown once per session, over the board, immediately after entering, for guests and for signed-in users alike.
+- [ ] Content per Appendix C: heading, one lead line, three items (move a card, tell the copilot, reload), a primary `Start using the board` button and the source link.
+- [ ] Gate it on `sessionStorage`, not `localStorage`, so a live demo always shows it on a fresh tab while a reload inside the same session does not.
+- [ ] Close on the button, on the close control, on Escape, and on a click on the backdrop.
+
+**Board header**
+
+- [ ] Rebuild the header as one white rounded panel with two rows separated by a hairline, replacing the current four-row block.
+- [ ] Row one: eyebrow, title, the description on a single line, and the Focus block on the right.
+- [ ] Row two: the column pills on the left, then the session countdown, the EN/ES toggle and `Log out` grouped together on the right. The two controls currently sit in opposite corners.
+- [ ] Each pill carries its column's card count and greys out (dot `#DFE6EE`, text `#829AB1`) when the count is zero, so the row stops repeating the column headers and becomes a board summary.
+- [ ] Fix the card count grammar: `1 card`, not `1 cards`. Zero reads as `No cards`.
+
+**Board layout and the copilot panel**
+
+- [ ] Put the copilot beside the columns instead of below them: a flex row holding the column grid and a 340px panel, gap 20.
+- [ ] The copilot is its own white rounded panel with the same border and radius as a column, inside the page padding. It is not a flush sidebar against the window edge.
+- [ ] An empty column renders a short dashed strip, not a full-height well. This is what lets five columns and the copilot share one screen.
+- [ ] Below 1280px the copilot moves under the board at full width. Below 768px the columns scroll horizontally with scroll snap.
+- [ ] Panel head: the purple marker, `Board copilot`, and the message counter on the right.
+
+**The copilot marker**
+
+- [ ] After a successful board update from the copilot, diff the previous board against the new one and collect the ids of the cards that were added, moved or edited. Do not depend on the model naming them.
+- [ ] Marked cards render a 4px purple bar on the top edge, a raised shadow, and the `Moved by the copilot` chip. The mark clears after 8 seconds, and immediately if the user touches the card.
+- [ ] The copilot's reply ends with a summary strip stating how many cards changed.
+- [ ] Respect `prefers-reduced-motion`: no movement, the mark simply appears and disappears.
+
+**Footer (new component)**
+
+- [ ] Add `SiteFooter`: a white rounded panel at the bottom of the board page with four blocks, then a hairline and a bottom strip.
+- [ ] Blocks: who built it with the LinkedIn and GitHub links, then frontend, backend, and data and copilot.
+- [ ] Bottom strip: the demo-deletion note on the left, and the measured numbers on the right.
+- [ ] Put the test count and the timing numbers in one exported constant so they are updated in one place. They came from the Part 14 and Part 15 runs and will drift.
+- [x] Name and LinkedIn URL provided by the user on 2026-09-18: `Luis Salazar`, `https://www.linkedin.com/in/luis-alberto-salazar`. The footer uses these values (the mockup carried `[YOUR NAME]` and an empty profile link).
+
+**Copy**
+
+- [ ] Add every key in Appendix C to `lib/i18n.tsx` in both languages. No new string is hardcoded in a component.
+
+### Tests
+
+- [ ] Frontend unit: `AuthGate` renders both columns, the demo button still calls the guest route, and `Sign in` still posts the credentials.
+- [ ] Frontend unit: `WelcomePanel` renders on first entry, does not render on a second mount within the same session, closes on Escape, and returns focus to the element that had it before opening.
+- [ ] Frontend unit: the column pill shows `1 card` for one card and `No cards` for zero, and applies the muted style at zero.
+- [ ] Frontend unit: given a previous board and a copilot update, the diff returns exactly the ids of the cards that changed, and a card whose id is in that set renders the chip.
+- [ ] Frontend unit: the mark clears after the timeout, using fake timers.
+- [ ] Frontend unit: every visible string resolves through the i18n dictionary in both languages, with no missing key.
+- [ ] Playwright mocked E2E: the welcome panel appears after entering as a guest, closes on the button, and does not reappear on a reload in the same session.
+- [ ] Playwright integrated E2E against local Docker: send an instruction that moves a card, and confirm the moved card carries the marker and that the board still matches after a reload.
+- [ ] Playwright at 390px: the columns scroll horizontally, the copilot sits below the board, and no element overflows the viewport width.
+- [ ] Axe or an equivalent check on the entry screen, the board and the open welcome panel: no contrast failures, every control reachable by keyboard, visible focus.
+- [ ] Full suites pass locally against SQLite, then on Docker, then on production after the deploy.
+- [ ] Functional test (manual, by the user, local Docker then production): enter as a guest in English and in Spanish; confirm the welcome panel shows once; move a card and confirm it is marked and the mark fades; reload and confirm the board persists and the panel does not return; check the header and footer on a desktop window and on a phone-width window.
+
+### Success criteria
+
+- [ ] The entry screen explains what the app is without scrolling on a laptop, and the access card keeps working exactly as before.
+- [ ] A visitor sees the board, the copilot and the footer on one screen at 1440px, and the copilot reads as a panel of the board rather than a fixed sidebar.
+- [ ] Purple appears only where the copilot acted, and a card it changed is identifiable at a glance for eight seconds.
+- [ ] Every string is translated, nothing overflows at 390px, and the accessibility check is clean.
+
+### Appendix A: tokens
+
+| Role | Value | Where it is used |
+|---|---|---|
+| Page background | `#F4F6FA` | Behind every panel |
+| Panel and card | `#FFFFFF` | Header, columns, cards, copilot, footer |
+| Border | `#E1E8F0` | Panel and card borders, hairlines |
+| Border, stronger | `#D9E2EC` / `#BCCCDC` | Inputs, outlined buttons, dashed drop zones |
+| Heading and card title | `#102A43` | Titles, column names, labels |
+| Body | `#334E68` / `#243B53` | Paragraphs, copilot replies |
+| Card notes and support | `#627D98` | Card details, secondary lines. Replaces the gold tone |
+| Muted | `#829AB1` / `#9FB3C8` | Eyebrows, counts, placeholders |
+| Primary action | `#2196D6` | Try the demo, Send, user chat bubble |
+| Link | `#1479B8` | Add a card, Remove, text links |
+| Focus block | `#EAF6FC` background, `#1479B8` text | The tagline block in the header |
+| Column marker | `#F0B429` | Column bars and pill dots |
+| Copilot | `#7A3E9D` | Marker bar, panel dot, nothing else |
+| Copilot chip | `#F3E8FA` background, `#5B2A78` text | `Moved by the copilot` |
+
+Radii: card 11, column and copilot panel 14, header and footer panel 16, control 8 to 11, pill 999.
+Shadows: card at rest `0 1px 2px rgba(16,42,67,.06)`; a card the copilot changed `0 3px 12px rgba(122,62,157,.16)`; the access card `0 18px 44px rgba(16,42,67,.10)`; the welcome panel `0 26px 68px rgba(16,42,67,.36)` over a `rgba(16,42,67,.55)` backdrop.
+Type: 50/1.04 700 for the entry title, 28/1.1 700 for the board title, 30/1.15 700 for the welcome heading, 16 700 for column names, 14 600 for card titles, 12.5/1.45 400 for card notes, 11 600 at 0.1em uppercase for counts and eyebrows.
+Spacing: page padding 20/24, gap between panels 16, gap between columns 14, gap between the column grid and the copilot 20, padding inside a column 14/13, inside a card 11/12.
+
+### Appendix B: structure
+
+Entry screen, at 1440:
+
+```
+┌─────────────────────────────────────────┬──────────────────┐
+│ SINGLE BOARD KANBAN                     │ Start in one tap │
+│ Kanban Studio                           │        [EN][ES]  │
+│ two short paragraphs                    │ [ Try the demo ] │
+│ ┌─── sample exchange ────────────────┐  │ one-hour note    │
+│ │        [user bubble, blue, right]  │  │ ──── OR ────     │
+│ │ [card ▌purple]  [card ▌purple]     │  │ Username [    ]  │
+│ └────────────────────────────────────┘  │ Password [    ]  │
+│ ── three things to try ──               │ [ Sign in ] out- │
+│ stack line          Read the source     │        lined     │
+└─────────────────────────────────────────┴──────────────────┘
+```
+
+Board page:
+
+```
+┌───────────────────────────────────────────────────────────┐
+│ SINGLE BOARD KANBAN          │  FOCUS                     │
+│ Kanban Studio                │  One board. Five columns.  │
+│ description on one line      │                            │
+│ ──────────────────────────────────────────────────────────│
+│ (•Backlog 3)(•Discovery 1)…   47 min left  [EN|ES] [Log out]│
+└───────────────────────────────────────────────────────────┘
+┌────────┬────────┬────────┬────────┬────────┬─────────────┐
+│Backlog │Discov. │In Prog.│Review  │Done    │ ▌Board      │
+│        │        │▌ card  │        │        │   copilot   │
+│        │        │▌ card  │[dashed]│        │  messages   │
+│[+ card]│[+ card]│[+ card]│[+ card]│[+ card]│  [input]    │
+└────────┴────────┴────────┴────────┴────────┴─────────────┘
+┌───────────────────────────────────────────────────────────┐
+│ Built by …    │ Frontend   │ Backend    │ Data and copilot│
+│ ──────────────────────────────────────────────────────────│
+│ deletion note                    290 ms · 1.9 s · 10 msgs │
+└───────────────────────────────────────────────────────────┘
+```
+
+Breakpoints: >=1280 as drawn; 1024 to 1279 the copilot moves under the board at full width; 768 to 1023 the entry screen stacks and the footer becomes two columns; <768 the board columns scroll horizontally with scroll snap and the footer becomes one column.
+
+### Appendix C: copy and i18n keys
+
+| Key | English | Spanish |
+|---|---|---|
+| `entry.eyebrow` | Single board kanban | Kanban de un solo tablero |
+| `entry.lead1` | One board, five columns, zero clutter. Drag cards between stages, rename columns, and keep quick notes without getting buried in settings. | Un tablero, cinco columnas, cero ruido. Arrastrá tarjetas entre etapas, renombrá columnas y anotá lo justo sin perderte en configuraciones. |
+| `entry.lead2` | The difference is the copilot: tell it what you want in plain language and it rewrites the board for you. | La diferencia es el copiloto: decile en lenguaje natural lo que querés y reescribe el tablero por vos. |
+| `entry.sample.prompt` | Move everything about security into In Progress | Pasá todo lo de seguridad a In Progress |
+| `entry.try1` | Drag a card from Backlog to Discovery, or double-click it to edit the title and the notes. | Arrastrá una tarjeta de Backlog a Discovery, o hacé doble clic para editar el título y las notas. |
+| `entry.try2` | Ask the copilot to summarise the board, or to draft the cards for a release checklist. | Pedile al copiloto que resuma el tablero, o que arme las tarjetas de un checklist de release. |
+| `entry.try3` | Everything you change is saved, so a reload brings your board back. | Todo lo que cambiás se guarda, así que al recargar tu tablero vuelve. |
+| `entry.stack` | Next.js and FastAPI, SQLite and Turso, OpenRouter for the copilot. | Next.js y FastAPI, SQLite y Turso, OpenRouter para el copiloto. |
+| `entry.source` | Read the source | Ver el código |
+| `entry.card.title` | Start in one tap | Entrá en un toque |
+| `entry.demo.button` | Try the demo | Probar la demo |
+| `entry.demo.note` | No account, no email. Your demo session lasts one hour, then the board and its data are deleted. | Sin cuenta ni correo. Tu sesión de demo dura una hora, después se borran el tablero y sus datos. |
+| `entry.or` | Or | O |
+| `entry.signin` | Sign in | Iniciar sesión |
+| `welcome.eyebrow` | You are in | Ya estás adentro |
+| `welcome.heading` | This board is yours for the next hour. | Este tablero es tuyo por la próxima hora. |
+| `welcome.lead` | Nothing you do here touches anyone else. Three things worth trying before it expires. | Nada de lo que hagas acá toca a nadie más. Tres cosas que vale la pena probar antes de que expire. |
+| `welcome.item1.title` | Move a card | Mové una tarjeta |
+| `welcome.item1.body` | Drag it between Backlog, Discovery, In Progress, Review and Done. Double-click a card to edit it. | Arrastrala entre Backlog, Discovery, In Progress, Review y Done. Hacé doble clic para editarla. |
+| `welcome.item2.title` | Tell the copilot what you want | Decile al copiloto qué querés |
+| `welcome.item2.body` | It is the panel on the right. Cards it changes are marked in purple for a few seconds. | Es el panel de la derecha. Las tarjetas que cambia quedan marcadas en violeta unos segundos. |
+| `welcome.item3.title` | Reload the page | Recargá la página |
+| `welcome.item3.body` | Your board comes back exactly as you left it. After an hour it is deleted. | Tu tablero vuelve tal como lo dejaste. Después de una hora se borra. |
+| `welcome.start` | Start using the board | Empezar a usar el tablero |
+| `welcome.close` | Close | Cerrar |
+| `board.session` | Demo session · {minutes} min left | Sesión de demo · quedan {minutes} min |
+| `board.logout` | Log out | Salir |
+| `board.cards.zero` | No cards | Sin tarjetas |
+| `board.cards.one` | 1 card | 1 tarjeta |
+| `board.cards.other` | {count} cards | {count} tarjetas |
+| `board.drop` | Drop a card here | Soltá una tarjeta acá |
+| `board.add` | Add a card | Agregar tarjeta |
+| `copilot.title` | Board copilot | Copiloto del tablero |
+| `copilot.counter` | {used} of {limit} | {used} de {limit} |
+| `copilot.label` | Ask about the board or request a card change | Preguntá sobre el tablero o pedí un cambio |
+| `copilot.placeholder` | Draft the cards for a release checklist | Armá las tarjetas de un checklist de release |
+| `copilot.send` | Send | Enviar |
+| `copilot.updated` | {count} cards updated on the board | {count} tarjetas actualizadas en el tablero |
+| `card.copilot.chip` | Moved by the copilot | Movida por el copiloto |
+| `footer.builtby` | Built by {name} | Hecho por {name} |
+| `footer.builtby.body` | Designed, built and deployed end to end, from the database to the copilot. | Diseñado, construido y desplegado de punta a punta, desde la base de datos hasta el copiloto. |
+| `footer.frontend` | Frontend | Frontend |
+| `footer.frontend.1` | Next.js, exported as static files and served from the CDN. | Next.js, exportado como archivos estáticos y servido desde la CDN. |
+| `footer.frontend.2` | Drag and drop, inline editing, English and Spanish. | Arrastrar y soltar, edición en línea, inglés y español. |
+| `footer.backend` | Backend | Backend |
+| `footer.backend.1` | FastAPI running as a Python function on Vercel. | FastAPI corriendo como función Python en Vercel. |
+| `footer.backend.2` | Session auth, one board per user, {tests} automated tests. | Sesión por cookie, un tablero por usuario, {tests} tests automatizados. |
+| `footer.data` | Data and copilot | Datos y copiloto |
+| `footer.data.1` | Turso, SQLite compatible, one JSON board per user. | Turso, compatible con SQLite, un tablero JSON por usuario. |
+| `footer.data.2` | openai/gpt-oss-120b through OpenRouter, capped per session. | openai/gpt-oss-120b vía OpenRouter, con tope por sesión. |
+| `footer.note` | Public demo. Guest boards are deleted one hour after they are created. | Demo pública. Los tableros de invitado se borran una hora después de creados. |
+| `footer.perf` | {load} to load a board · {cold} cold start · {limit} copilot messages per session | {load} para cargar un tablero · {cold} de arranque en frío · {limit} mensajes de copiloto por sesión |
+
+The Spanish column names stay untranslated. `Backlog`, `Discovery`, `In Progress`, `Review` and `Done` are user-editable data, not UI strings, and translating them would fight the rename feature.
+
+### Appendix D: behaviour and accessibility
+
+- The welcome panel traps focus while open, restores focus to the trigger on close, carries `role="dialog"` and `aria-modal="true"`, and is labelled by its heading. Escape closes it.
+- The copilot marker is announced once through an `aria-live="polite"` region carrying the summary line, so it is not conveyed by colour alone. The chip text carries the same meaning.
+- Every icon-only control has an `aria-label`. The close control on the welcome panel is the only one in this phase.
+- Touch targets stay at 44px or more. The primary buttons are already at 48 to 52.
+- Under `prefers-reduced-motion: reduce`, the marker appears and disappears without transition and the panel opens without animation.
+- Nothing in this phase changes an API route, the session model, or the structured-update contract. If a change looks like it needs one, stop and raise it instead.
+
 ## Appendix: starting points for the tests
 
 These are templates. The imports, fixture names, and helper functions are guesses at the layout; adjust them to the real names in `backend/app/` and `frontend/` (for example, the backend fixture is `temporary_database` in `backend/tests/test_main.py`, the session column is `sessions.id`, cards live in `board["cards"]` keyed by id with `columns[].cardIds`, and the chat request field is `question`).
