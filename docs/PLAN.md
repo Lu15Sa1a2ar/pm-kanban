@@ -372,13 +372,13 @@ Found by the user during the Part 15 functional test: a long assistant answer (M
 - [x] Backend unit: the system prompt sent to OpenRouter contains the formatting instruction (captured through the existing `httpx.post` monkeypatch).
 - [x] Integrated Playwright against local Docker: ask the assistant to explain the board and confirm the answer contains more than one rendered block.
 - [x] Full suites pass locally; verify on Docker first, then on production after the deploy.
-- [x] Functional test (manual, by the user, local Docker then production): ask "explícame el tablero" in Spanish and English and confirm the answer is readable, with line breaks and lists, on desktop and on a phone-width window. Local verified by the user on 2026-09-18.
+- [x] Functional test (manual, by the user, local Docker then production): ask "explícame el tablero" in Spanish and English and confirm the answer is readable, with line breaks and lists, on desktop and on a phone-width window. Local verified by the user on 2026-09-18; production verified the same day: the chat answered "explícame el tablero" with a short paragraph and a `-` list, no headings or tables, and the smoke suite passed 3/3.
 
 Implementation notes (2026-09-18): new `components/AssistantMessage.tsx` wraps `react-markdown` 10.1.0 with no plugins and a `components` override that drops images, keeps only `http(s)` links (`target="_blank" rel="noopener noreferrer"`) and styles paragraphs and lists; raw HTML is never rendered (no `rehype-raw`). User messages stay plain text with `whitespace-pre-wrap`. Chat bubbles carry `data-testid="chat-message"`. Backend 35/35, Vitest 26/26, mocked Playwright 6/6, integrated 3/3 three times in a row on Docker (the AI test now asks for one line per column and asserts more than one rendered block and no headings, tables or images). The Part 18 renderer rules are already satisfied here.
 
 ### Success criteria
 
-- [ ] Assistant answers in the sidebar are formatted and readable, and the model no longer produces headings or tables in its replies.
+- [x] Assistant answers in the sidebar are formatted and readable, and the model no longer produces headings or tables in its replies.
 
 ## Part 17: Critical security fixes before wider sharing
 
