@@ -1,6 +1,7 @@
 import sqlite3
 from datetime import datetime, timedelta
 
+import httpx
 import pytest
 import turso_serverless
 from fastapi.testclient import TestClient
@@ -352,8 +353,11 @@ def test_board_round_trips_through_the_model_shape() -> None:
     for_model = board_for_model(INITIAL_BOARD)
     assert for_model["cards"] == [INITIAL_BOARD["cards"]["card-1"]]
     assert board_from_model(for_model) == INITIAL_BOARD
-    assert board_from_model({"Backlog": ["x"]}) == {"Backlog": ["x"]}
     assert board_from_model(None) is None
+    assert board_from_model({"columns": [], "cards": []}) is None
+    assert board_from_model({"Backlog": ["x"]}) is None
+    malformed = {"columns": [{"id": "c"}], "cards": [{"title": "no id"}]}
+    assert board_from_model(malformed) == malformed
 
 
 def test_structured_request_retries_once_on_empty_completion(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -384,3 +388,72 @@ def test_structured_request_retries_once_on_empty_completion(monkeypatch: pytest
     assert response.status_code == 200
     assert response.json()["response"] == "second try"
     assert len(calls) == 2
+
+
+def test_structured_request_retries_once_on_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    calls: list[int] = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": '{"response": "after retry", "board": null}'}}]}
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(1)
+        if len(calls) == 1:
+            raise httpx.ReadTimeout("slow provider")
+        return FakeResponse()
+
+    monkeypatch.setattr("app.ai.httpx.post", fake_post)
+    client = TestClient(app)
+    client.post("/api/auth/guest")
+
+    response = client.post("/api/ai/chat", json={"question": "hi", "history": []})
+
+    assert response.status_code == 200
+    assert response.json()["response"] == "after retry"
+    assert len(calls) == 2
+
+
+def test_structured_request_fails_after_second_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    def always_timeout(url, headers, json, timeout):
+        raise httpx.ReadTimeout("slow provider")
+
+    monkeypatch.setattr("app.ai.httpx.post", always_timeout)
+    client = TestClient(app)
+    client.post("/api/auth/guest")
+
+    assert client.post("/api/ai/chat", json={"question": "hi", "history": []}).status_code == 502
+
+
+def test_plain_text_completion_becomes_a_text_only_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": "El tablero tiene cinco columnas."}}]}
+
+    def fake_post(url, headers, json, timeout):
+        captured.update(json)
+        return FakeResponse()
+
+    monkeypatch.setattr("app.ai.httpx.post", fake_post)
+    client = TestClient(app)
+    client.post("/api/auth/guest")
+    before = client.get("/api/board").json()
+
+    response = client.post("/api/ai/chat", json={"question": "resume el tablero", "history": []})
+
+    assert response.status_code == 200
+    assert response.json() == {"response": "El tablero tiene cinco columnas.", "board": None}
+    assert client.get("/api/board").json() == before
+    assert captured["provider"] == {"require_parameters": True, "ignore": ["DeepInfra"]}

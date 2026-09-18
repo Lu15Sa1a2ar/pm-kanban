@@ -66,10 +66,20 @@ RESPONSE_SCHEMA = _strict_object(
         "response": {"type": "string"},
         "board": {
             "description": "null unless the question asked to change the board",
-            "anyOf": [STRUCTURED_BOARD_SCHEMA, {"type": "null"}],
+            "anyOf": [{"type": "null"}, STRUCTURED_BOARD_SCHEMA],
         },
     }
 )
+
+
+def parse_structured_content(content: Any) -> dict[str, Any]:
+    """A provider that ignores the JSON schema answers in plain text; keep it as a text-only reply."""
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError("empty completion")
+    try:
+        return json.loads(content)
+    except ValueError:
+        return {"response": content.strip(), "board": None}
 
 
 def board_for_model(board: dict[str, Any]) -> dict[str, Any]:
@@ -77,7 +87,12 @@ def board_for_model(board: dict[str, Any]) -> dict[str, Any]:
 
 
 def board_from_model(board: Any) -> Any:
-    """Undo `board_for_model`; anything unexpected is returned as-is for the schema to reject."""
+    """Undo `board_for_model`; anything unexpected is returned as-is for the schema to reject.
+
+    An empty board means the model filled the slot instead of choosing null: no change.
+    """
+    if isinstance(board, dict) and not board.get("columns") and not board.get("cards"):
+        return None
     if isinstance(board, dict) and isinstance(board.get("cards"), list):
         cards = board["cards"]
         if all(isinstance(card, dict) and "id" in card for card in cards):
@@ -161,6 +176,9 @@ def ask_openrouter_structured(
     request = {
         "model": MODEL,
         "messages": messages,
+        # OpenRouter spreads this model across providers; only those honouring
+        # response_format may serve it, and DeepInfra claims to but returns plain text.
+        "provider": {"require_parameters": True, "ignore": ["DeepInfra"]},
         "response_format": {
             "type": "json_schema",
             "json_schema": {"name": "kanban_assistant", "strict": True, "schema": RESPONSE_SCHEMA},
@@ -168,19 +186,24 @@ def ask_openrouter_structured(
     }
     try:
         content = None
-        # The provider occasionally returns an empty completion; one retry covers it.
-        for _attempt in range(2):
-            response = httpx.post(
-                OPENROUTER_URL,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json=request,
-                timeout=30.0,
-            )
+        # The provider occasionally times out or returns an empty completion; one retry covers it.
+        for attempt in range(2):
+            try:
+                response = httpx.post(
+                    OPENROUTER_URL,
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json=request,
+                    timeout=60.0,
+                )
+            except httpx.TimeoutException:
+                if attempt:
+                    raise
+                continue
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
             if content:
                 break
-        result = json.loads(content)
+        result = parse_structured_content(content)
     except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as error:
         raise AIRequestError("OpenRouter structured request failed") from error
 
