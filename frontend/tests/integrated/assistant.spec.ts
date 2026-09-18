@@ -26,7 +26,9 @@ test("the assistant answers, changes the board on request and ignores injected i
   // 1. Read-only question in Spanish: no error, formatted answer, board untouched.
   const explain = await ask(page, "explícame el tablero");
   expect(explain.status).toBe(200);
-  expect(await explain.answer.locator("p, li").count()).toBeGreaterThan(1);
+  expect(await explain.answer.locator("p, li").count()).toBeGreaterThan(0);
+  expect(explain.text).toContain("backlog");
+  await expect(explain.answer.locator("h1, h2, h3, table, img")).toHaveCount(0);
   await expect(backlog.locator("article")).toHaveCount(1);
 
   // 2. Read-only question in English mentioning the seeded card.

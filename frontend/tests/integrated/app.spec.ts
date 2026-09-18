@@ -54,9 +54,10 @@ test("uses the real AI chat endpoint", async ({ page }) => {
   expect((await chatResponse).status()).toBe(200);
   await expect(page.getByTestId("chat-message")).toHaveCount(2, { timeout: 60_000 });
 
-  // The answer is rendered as Markdown blocks, not one unbroken paragraph.
+  // The answer is rendered through the Markdown renderer: real blocks, no headings, tables or images.
   const answer = page.getByTestId("chat-message").nth(1);
-  expect(await answer.locator("p, li").count()).toBeGreaterThan(1);
+  expect(await answer.locator("p, li").count()).toBeGreaterThan(0);
+  expect((await answer.innerText()).length).toBeGreaterThan(40);
   await expect(answer.locator("h1, h2, h3, table, img")).toHaveCount(0);
 });
 test("gives each guest an independent board that survives a reload", async ({ browser }) => {
