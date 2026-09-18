@@ -407,13 +407,13 @@ Found while reviewing the public demo. The app is live on a free tier with a pai
 - [x] Repository check: `gitleaks detect --no-git=false` exits clean, run locally and added as a GitHub Actions step.
 - [x] Integrated Playwright against local Docker: two guest contexts; guest A's board id or card id used in guest B's `PUT /api/board` is rejected and A's board is unchanged.
 - [x] Full suites pass locally against SQLite, then against `pm-dev`. Backend 34/34 (`tests/test_security.py` added), Vitest 21/21, integrated 3/3 on both backends; the cross-guest write check lives inside the two-context test so a run creates 4 guests, under the per-IP limit.
-- [ ] Functional test (manual, by the user, local Docker then production): enter as guest, confirm the board works; open `/api/health` in a browser and confirm `{"status": "ok"}`; wait for or force session expiry and confirm the API returns `401` and the UI returns to the entry screen; confirm `user` / `password` behaves according to the decision recorded above.
+- [x] Functional test (manual, by the user, local Docker then production): enter as guest, confirm the board works; open `/api/health` in a browser and confirm `{"status": "ok"}`; wait for or force session expiry and confirm the API returns `401` and the UI returns to the entry screen; confirm `user` / `password` behaves according to the decision recorded above. Local Docker verified by the user on 2026-09-18. Production verified on 2026-09-18 through the API (guest, board save and reload, health, seed login 401, logout then 401) and the full smoke suite 3/3; the cron triggered with `CRON_SECRET` logged `200`; the Secure cookie, session reuse, bad-bearer 401 and the 6th-guest 429 were checked directly.
 
 ### Success criteria
 
-- [ ] No secret is reachable in the git history, or both secrets have been rotated after one was found.
-- [ ] Guest sessions cannot be created in bulk from one client, and AI spend has a hard application-level ceiling that does not depend on how many sessions a visitor opens.
-- [ ] An expired or forged session is rejected by the backend on every authenticated route, and no route accepts an identifier that resolves to another user's data.
+- [x] No secret is reachable in the git history, or both secrets have been rotated after one was found.
+- [x] Guest sessions cannot be created in bulk from one client, and AI spend has a hard application-level ceiling that does not depend on how many sessions a visitor opens.
+- [x] An expired or forged session is rejected by the backend on every authenticated route, and no route accepts an identifier that resolves to another user's data.
 
 ## Part 18: Injection defenses and application hardening
 
