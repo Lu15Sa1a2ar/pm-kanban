@@ -343,3 +343,44 @@ def test_chat_system_prompt_asks_for_sidebar_friendly_formatting(monkeypatch: py
     system_prompt = captured["messages"][0]["content"]
     assert "never use headings, tables" in system_prompt
     assert "short paragraphs" in system_prompt
+
+
+def test_board_round_trips_through_the_model_shape() -> None:
+    from app.ai import board_for_model, board_from_model
+    from app.database import INITIAL_BOARD
+
+    for_model = board_for_model(INITIAL_BOARD)
+    assert for_model["cards"] == [INITIAL_BOARD["cards"]["card-1"]]
+    assert board_from_model(for_model) == INITIAL_BOARD
+    assert board_from_model({"Backlog": ["x"]}) == {"Backlog": ["x"]}
+    assert board_from_model(None) is None
+
+
+def test_structured_request_retries_once_on_empty_completion(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    contents = iter([None, '{"response": "second try", "board": null}'])
+    calls: list[int] = []
+
+    class FakeResponse:
+        def __init__(self, content):
+            self.content = content
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": self.content}}]}
+
+    def fake_post(url, headers, json, timeout):
+        calls.append(1)
+        return FakeResponse(next(contents))
+
+    monkeypatch.setattr("app.ai.httpx.post", fake_post)
+    client = TestClient(app)
+    client.post("/api/auth/guest")
+
+    response = client.post("/api/ai/chat", json={"question": "hi", "history": []})
+
+    assert response.status_code == 200
+    assert response.json()["response"] == "second try"
+    assert len(calls) == 2
