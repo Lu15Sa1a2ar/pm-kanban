@@ -180,3 +180,6 @@ cython_debug/
 .vercel
 .env*
 !.env.example
+
+# Playwright output
+frontend/test-results/
