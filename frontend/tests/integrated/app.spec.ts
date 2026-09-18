@@ -48,11 +48,16 @@ test("uses the real AI chat endpoint", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Try the demo" }).click();
 
-  await page.getByLabel("AI question").fill("Reply with a short greeting.");
+  await page.getByLabel("AI question").fill("Explain this board: list every column with one line each.");
   const chatResponse = page.waitForResponse("**/api/ai/chat");
   await page.getByRole("button", { name: "Send" }).click();
   expect((await chatResponse).status()).toBe(200);
-  await expect(page.locator("aside [aria-live] p")).toHaveCount(2, { timeout: 60_000 });
+  await expect(page.getByTestId("chat-message")).toHaveCount(2, { timeout: 60_000 });
+
+  // The answer is rendered as Markdown blocks, not one unbroken paragraph.
+  const answer = page.getByTestId("chat-message").nth(1);
+  expect(await answer.locator("p, li").count()).toBeGreaterThan(1);
+  await expect(answer.locator("h1, h2, h3, table, img")).toHaveCount(0);
 });
 test("gives each guest an independent board that survives a reload", async ({ browser }) => {
   const cardTitle = `Guest card ${Date.now()}`;

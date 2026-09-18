@@ -67,4 +67,17 @@ describe("AIChatSidebar", () => {
 
     expect(await screen.findByText("Unable to reach the AI assistant.")).toBeInTheDocument();
   });
+
+  it("shows user messages verbatim and formats assistant markdown", async () => {
+    vi.mocked(chat).mockResolvedValueOnce({ response: "Line one.\n\n- item a\n- item b", board: null });
+    const { container } = render(<AIChatSidebar onBoardUpdate={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText("AI question"), "**bold**");
+    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByText("Line one.")).toBeInTheDocument();
+    expect(screen.getByText("**bold**")).toBeInTheDocument();
+    expect(container.querySelectorAll("li")).toHaveLength(2);
+    expect(container.querySelector("strong")).toBeNull();
+  });
 });

@@ -318,3 +318,28 @@ def test_frontend_is_only_mounted_when_the_directory_exists(tmp_path) -> None:
     with_frontend = FastAPI()
     mount_frontend(with_frontend, STATIC_DIR)
     assert TestClient(with_frontend).get("/").status_code == 200
+
+
+def test_chat_system_prompt_asks_for_sidebar_friendly_formatting(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"choices": [{"message": {"content": '{"response": "ok", "board": null}'}}]}
+
+    def fake_post(url, headers, json, timeout):
+        captured.update(json)
+        return FakeResponse()
+
+    monkeypatch.setattr("app.ai.httpx.post", fake_post)
+    client = TestClient(app)
+    client.post("/api/auth/guest")
+
+    assert client.post("/api/ai/chat", json={"question": "Explain the board", "history": []}).status_code == 200
+    system_prompt = captured["messages"][0]["content"]
+    assert "never use headings, tables" in system_prompt
+    assert "short paragraphs" in system_prompt

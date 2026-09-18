@@ -72,7 +72,7 @@ Key invariant: board ownership is always resolved from the authenticated session
 - `lib/i18n.tsx` — Spanish/English language switching.
 - `components/AuthGate.tsx` — checks backend session, handles login/logout, gates rendering of the board.
 - `components/KanbanBoard.tsx` (+ `KanbanColumn`, `KanbanCard`, `KanbanCardPreview`, `NewCardForm`) — board UI; drag-and-drop via `@dnd-kit`. Card title/details are edited inline on double-click (`KanbanCard` disables sorting while editing so drag doesn't swallow input events).
-- `components/AIChatSidebar.tsx` — chat UI that calls the backend AI route and applies structured board updates returned by the model.
+- `components/AIChatSidebar.tsx` — chat UI that calls the backend AI route and applies structured board updates returned by the model. Assistant replies render through `components/AssistantMessage.tsx` (`react-markdown`, no plugins, no raw HTML, no images, links limited to http(s)); user messages are plain text. The system prompt in `ai.py` asks for short plain-text answers with simple lists, no headings or tables.
 
 **Board saving**: `KanbanBoard` persists only on explicit local mutations (never on load, and never when the AI sidebar hands back a board the backend already saved). Column renames go through a 500 ms debounce; everything else saves immediately.
 

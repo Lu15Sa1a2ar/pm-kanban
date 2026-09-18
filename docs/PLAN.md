@@ -362,17 +362,19 @@ Found by the user during the Part 15 functional test: a long assistant answer (M
 
 ### Checklist
 
-- [ ] `ai.py` system prompt: ask for short, plain-text answers suited to a narrow sidebar (short paragraphs and simple `-` lists, no headings or tables), and to keep answers about the board concise.
-- [ ] `AIChatSidebar`: render assistant messages with a lightweight Markdown renderer (`react-markdown`, no plugins) so paragraphs, lists, and bold text display correctly; keep user messages as plain text. Preserve newlines as a fallback (`whitespace-pre-wrap`).
-- [ ] Keep the sidebar readable on narrow screens: long lists wrap, no horizontal scroll.
+- [x] `ai.py` system prompt: ask for short, plain-text answers suited to a narrow sidebar (short paragraphs and simple `-` lists, no headings or tables), and to keep answers about the board concise.
+- [x] `AIChatSidebar`: render assistant messages with a lightweight Markdown renderer (`react-markdown`, no plugins) so paragraphs, lists, and bold text display correctly; keep user messages as plain text. Preserve newlines as a fallback (`whitespace-pre-wrap`).
+- [x] Keep the sidebar readable on narrow screens: long lists wrap, no horizontal scroll.
 
 ### Tests
 
-- [ ] Frontend unit: an assistant message with two paragraphs and a list renders as separate paragraphs and list items; a user message with Markdown syntax is shown verbatim.
-- [ ] Backend unit: the system prompt sent to OpenRouter contains the formatting instruction (captured through the existing `httpx.post` monkeypatch).
-- [ ] Integrated Playwright against local Docker: ask the assistant to explain the board and confirm the answer contains more than one rendered block.
-- [ ] Full suites pass locally; verify on Docker first, then on production after the deploy.
+- [x] Frontend unit: an assistant message with two paragraphs and a list renders as separate paragraphs and list items; a user message with Markdown syntax is shown verbatim.
+- [x] Backend unit: the system prompt sent to OpenRouter contains the formatting instruction (captured through the existing `httpx.post` monkeypatch).
+- [x] Integrated Playwright against local Docker: ask the assistant to explain the board and confirm the answer contains more than one rendered block.
+- [x] Full suites pass locally; verify on Docker first, then on production after the deploy.
 - [ ] Functional test (manual, by the user, local Docker then production): ask "explícame el tablero" in Spanish and English and confirm the answer is readable, with line breaks and lists, on desktop and on a phone-width window.
+
+Implementation notes (2026-09-18): new `components/AssistantMessage.tsx` wraps `react-markdown` 10.1.0 with no plugins and a `components` override that drops images, keeps only `http(s)` links (`target="_blank" rel="noopener noreferrer"`) and styles paragraphs and lists; raw HTML is never rendered (no `rehype-raw`). User messages stay plain text with `whitespace-pre-wrap`. Chat bubbles carry `data-testid="chat-message"`. Backend 35/35, Vitest 26/26, mocked Playwright 6/6, integrated 3/3 three times in a row on Docker (the AI test now asks for one line per column and asserts more than one rendered block and no headings, tables or images). The Part 18 renderer rules are already satisfied here.
 
 ### Success criteria
 

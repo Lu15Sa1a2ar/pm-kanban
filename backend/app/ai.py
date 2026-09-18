@@ -56,7 +56,10 @@ def ask_openrouter_structured(
             "role": "system",
             "content": (
                 "You are a project management assistant. Use the board JSON and conversation "
-                "history to answer the user. Only return a board update when requested."
+                "history to answer the user. Only return a board update when requested. "
+                "Your reply is shown in a narrow chat sidebar: keep it short, use plain text "
+                "in short paragraphs and simple '-' lists, and never use headings, tables, "
+                "code blocks or images. Answer in the language of the question."
             ),
         },
         *history,

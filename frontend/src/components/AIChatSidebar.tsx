@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { AssistantMessage } from "@/components/AssistantMessage";
 import { ApiError, chat, type ChatMessage } from "@/lib/api";
 import type { BoardData } from "@/lib/kanban";
 import { useI18n } from "@/lib/i18n";
@@ -66,16 +67,17 @@ export const AIChatSidebar = ({
           </p>
         ) : (
           messages.map((message, index) => (
-            <p
+            <div
               className={`rounded-xl px-4 py-3 text-sm leading-6 ${
                 message.role === "user"
-                  ? "ml-8 bg-[var(--navy-dark)] text-white"
+                  ? "ml-8 whitespace-pre-wrap bg-[var(--navy-dark)] text-white"
                   : "mr-8 bg-[var(--surface)] text-[var(--navy-dark)]"
               }`}
+              data-testid="chat-message"
               key={`${message.role}-${index}`}
             >
-              {message.content}
-            </p>
+              {message.role === "assistant" ? <AssistantMessage content={message.content} /> : message.content}
+            </div>
           ))
         )}
       </div>
