@@ -21,7 +21,9 @@ SYSTEM_PROMPT = (
     "question explicitly asks to change the board; never use it to describe, list or "
     "summarize the board. When you do change the board, return the complete board with "
     "exactly the same shape as the one you received: 'columns' (id, title, cardIds) and "
-    "'cards' as a list of {id, title, details}. Keep every column id."
+    "'cards' as a list of {id, title, details}. Keep every column id. When you create a "
+    "card and the user gave no details, write one short sentence of details that fits the "
+    "title, in the language of the question; never leave 'details' empty."
 )
 
 

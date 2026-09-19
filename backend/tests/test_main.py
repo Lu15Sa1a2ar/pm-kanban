@@ -344,6 +344,7 @@ def test_chat_system_prompt_asks_for_sidebar_friendly_formatting(monkeypatch: py
     system_prompt = captured["messages"][0]["content"]
     assert "never use headings, tables" in system_prompt
     assert "short paragraphs" in system_prompt
+    assert "never leave 'details' empty" in system_prompt
 
 
 def test_board_round_trips_through_the_model_shape() -> None:
