@@ -22,23 +22,24 @@ describe("AIChatSidebar", () => {
 
   it("sends a question and applies a structured board update", async () => {
     const onBoardUpdate = vi.fn();
-    render(<AIChatSidebar onBoardUpdate={onBoardUpdate} />);
+    render(<AIChatSidebar board={initialData} onBoardUpdate={onBoardUpdate} />);
 
-    await userEvent.type(screen.getByLabelText("AI question"), "Rename the first column");
+    await userEvent.type(screen.getByLabelText("Ask about the board or request a card change"), "Rename the first column");
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("The first column is now Ideas.")).toBeInTheDocument();
     expect(chat).toHaveBeenCalledWith("Rename the first column", []);
     expect(onBoardUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ columns: expect.arrayContaining([expect.objectContaining({ title: "Ideas" })]) })
+      expect.objectContaining({ columns: expect.arrayContaining([expect.objectContaining({ title: "Ideas" })]) }),
+      []
     );
   });
 
   it("tells the user when the AI message limit is reached", async () => {
     vi.mocked(chat).mockRejectedValueOnce(new ApiError(429, "ai_session_limit"));
-    render(<AIChatSidebar onBoardUpdate={vi.fn()} />);
+    render(<AIChatSidebar board={initialData} onBoardUpdate={vi.fn()} />);
 
-    await userEvent.type(screen.getByLabelText("AI question"), "One more");
+    await userEvent.type(screen.getByLabelText("Ask about the board or request a card change"), "One more");
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(
@@ -48,9 +49,9 @@ describe("AIChatSidebar", () => {
 
   it("tells the user when the daily AI budget is exhausted", async () => {
     vi.mocked(chat).mockRejectedValueOnce(new ApiError(429, "ai_daily_limit"));
-    render(<AIChatSidebar onBoardUpdate={vi.fn()} />);
+    render(<AIChatSidebar board={initialData} onBoardUpdate={vi.fn()} />);
 
-    await userEvent.type(screen.getByLabelText("AI question"), "Hello");
+    await userEvent.type(screen.getByLabelText("Ask about the board or request a card change"), "Hello");
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(
@@ -60,9 +61,9 @@ describe("AIChatSidebar", () => {
 
   it("shows a generic error for other failures", async () => {
     vi.mocked(chat).mockRejectedValueOnce(new ApiError(502, "bad gateway"));
-    render(<AIChatSidebar onBoardUpdate={vi.fn()} />);
+    render(<AIChatSidebar board={initialData} onBoardUpdate={vi.fn()} />);
 
-    await userEvent.type(screen.getByLabelText("AI question"), "Hello");
+    await userEvent.type(screen.getByLabelText("Ask about the board or request a card change"), "Hello");
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("Unable to reach the AI assistant.")).toBeInTheDocument();
@@ -70,9 +71,9 @@ describe("AIChatSidebar", () => {
 
   it("shows user messages verbatim and formats assistant markdown", async () => {
     vi.mocked(chat).mockResolvedValueOnce({ response: "Line one.\n\n- item a\n- item b", board: null });
-    const { container } = render(<AIChatSidebar onBoardUpdate={vi.fn()} />);
+    const { container } = render(<AIChatSidebar board={initialData} onBoardUpdate={vi.fn()} />);
 
-    await userEvent.type(screen.getByLabelText("AI question"), "**bold**");
+    await userEvent.type(screen.getByLabelText("Ask about the board or request a card change"), "**bold**");
     await userEvent.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByText("Line one.")).toBeInTheDocument();

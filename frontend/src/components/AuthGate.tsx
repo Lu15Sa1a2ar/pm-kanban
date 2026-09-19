@@ -2,11 +2,47 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { WelcomePanel } from "@/components/WelcomePanel";
 import { getCurrentUser, login, loginAsGuest, logout } from "@/lib/api";
+import { facts } from "@/lib/facts";
 import { useI18n } from "@/lib/i18n";
 
+const GUEST_SESSION_KEY = "pm-guest-session";
+const GUEST_SESSION_MS = 60 * 60 * 1000;
+
+// The API does not expose the session expiry, so the guest start time is kept
+// in the browser and reused on a reload when it still belongs to the same guest.
+const readGuestStart = (username: string): number | null => {
+  try {
+    const stored = JSON.parse(window.localStorage.getItem(GUEST_SESSION_KEY) || "null");
+    return stored && stored.username === username ? Number(stored.startedAt) : null;
+  } catch {
+    return null;
+  }
+};
+
+const rememberGuestStart = (username: string) => {
+  const existing = readGuestStart(username);
+  if (existing) {
+    return existing;
+  }
+  const startedAt = Date.now();
+  try {
+    window.localStorage.setItem(GUEST_SESSION_KEY, JSON.stringify({ username, startedAt }));
+  } catch {
+    // Storage blocked: the countdown is simply not shown after a reload.
+  }
+  return startedAt;
+};
+
+const expiryFor = (username: string, startedAt: number | null) =>
+  username.startsWith("guest-") && startedAt ? startedAt + GUEST_SESSION_MS : undefined;
+
+type Session = { status: "loading" } | { status: "signed-out" } | { status: "signed-in"; expiresAt?: number };
+
 export const AuthGate = () => {
-  const [status, setStatus] = useState<"loading" | "signed-out" | "signed-in">("loading");
+  const [session, setSession] = useState<Session>({ status: "loading" });
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -14,8 +50,10 @@ export const AuthGate = () => {
 
   useEffect(() => {
     getCurrentUser()
-      .then(() => setStatus("signed-in"))
-      .catch(() => setStatus("signed-out"));
+      .then((user) =>
+        setSession({ status: "signed-in", expiresAt: expiryFor(user.username, readGuestStart(user.username)) })
+      )
+      .catch(() => setSession({ status: "signed-out" }));
   }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -23,65 +61,124 @@ export const AuthGate = () => {
     try {
       await login(username, password);
       setError("");
-      setStatus("signed-in");
+      setSession({ status: "signed-in" });
     } catch {
-      setError(t("invalidCredentials"));
+      setError(t("entry.invalid"));
     }
   };
 
   const handleGuest = async () => {
     try {
-      await loginAsGuest();
+      const guest = await loginAsGuest();
       setError("");
-      setStatus("signed-in");
+      setSession({ status: "signed-in", expiresAt: expiryFor(guest.username, rememberGuestStart(guest.username)) });
     } catch {
-      setError(t("demoError"));
+      setError(t("entry.demo.error"));
     }
   };
 
   const handleLogout = async () => {
     await logout();
-    setStatus("signed-out");
+    setSession({ status: "signed-out" });
   };
 
-  if (status === "loading") {
-    return <div className="min-h-screen bg-[var(--surface)]" aria-busy="true" />;
+  if (session.status === "loading") {
+    return <div className="min-h-screen bg-page" aria-busy="true" />;
   }
 
-  if (status === "signed-in") {
-    return <KanbanBoard onLogout={handleLogout} remote />;
+  if (session.status === "signed-in") {
+    return (
+      <>
+        <KanbanBoard onLogout={handleLogout} remote sessionExpiresAt={session.expiresAt} />
+        <WelcomePanel />
+      </>
+    );
   }
+
+  const tries = [t("entry.try1"), t("entry.try2"), t("entry.try3")];
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-6 py-12">
-      <section className="w-full max-w-md rounded-[32px] border border-[var(--stroke)] bg-white/90 p-8 shadow-[var(--shadow)] backdrop-blur">
-        <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-          {t("singleBoard")}
-        </p>
-        <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
+    <main className="mx-auto grid min-h-screen w-full max-w-[1240px] items-center gap-10 px-5 py-10 sm:px-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:gap-16 lg:py-14">
+      <section data-testid="entry-content">
+        <p className="eyebrow text-muted">{t("entry.eyebrow")}</p>
+        <h1 className="mt-3 font-display text-[40px] font-bold leading-[1.04] text-heading sm:text-[50px]">
           {t("title")}
         </h1>
-        <p className="mt-3 text-sm leading-6 text-[var(--gray-text)]">
-          {t("loginPrompt")}
+        <p className="mt-5 max-w-[560px] text-[17px] leading-7 text-body">{t("entry.lead1")}</p>
+        <p className="mt-3 max-w-[560px] text-[17px] leading-7 text-body">{t("entry.lead2")}</p>
+
+        <div className="mt-7 max-w-[560px] rounded-[14px] border border-line bg-panel p-4" aria-hidden="true">
+          <div className="flex justify-end">
+            <p className="max-w-[80%] rounded-xl rounded-br-sm bg-primary px-4 py-2.5 text-sm leading-6 text-white">
+              {t("entry.sample.prompt")}
+            </p>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {[t("entry.sample.card1"), t("entry.sample.card2")].map((title) => (
+              <div
+                key={title}
+                className="rounded-[11px] border border-line border-t-4 border-t-copilot bg-panel px-3 py-2.5 shadow-card-copilot"
+              >
+                <p className="text-sm font-semibold text-heading">{title}</p>
+                <span className="mt-2 inline-block rounded-full bg-copilot-bg px-2 py-0.5 text-[11px] font-semibold text-copilot-text">
+                  {t("card.copilot.chip")}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <p className="eyebrow mt-8 text-muted">{t("entry.try.heading")}</p>
+        <ul className="mt-3 max-w-[560px] space-y-2">
+          {tries.map((item) => (
+            <li key={item} className="flex gap-3 text-[15px] leading-6 text-body">
+              <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-marker" aria-hidden="true" />
+              {item}
+            </li>
+          ))}
+        </ul>
+
+        <p className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+          <span>{t("entry.stack")}</span>
+          <a
+            className="font-semibold text-link underline-offset-4 hover:underline"
+            href={facts.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t("entry.source")}
+          </a>
         </p>
+      </section>
+
+      <section
+        className="w-full rounded-2xl border border-line bg-panel p-6 shadow-access sm:p-8"
+        data-testid="entry-access"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="font-display text-xl font-bold text-heading">{t("entry.card.title")}</h2>
+          <LanguageToggle />
+        </div>
         <button
-          className="mt-8 w-full rounded-xl bg-[var(--primary-blue)] px-4 py-3 font-semibold text-white transition hover:brightness-110"
+          className="mt-6 w-full rounded-[11px] bg-primary px-4 py-3.5 text-[15px] font-semibold text-white transition hover:brightness-110"
           type="button"
           onClick={handleGuest}
         >
-          {t("tryDemo")}
+          {t("entry.demo.button")}
         </button>
-        <p className="mt-3 text-xs leading-5 text-[var(--gray-text)]">{t("demoNote")}</p>
-        <p className="mt-6 text-center text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-          {t("or")}
-        </p>
-        <form className="mt-4 space-y-5" onSubmit={handleSubmit}>
+        <p className="mt-3 text-[13px] leading-5 text-support">{t("entry.demo.note")}</p>
+        <div className="mt-6 flex items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-line" />
+          <span className="eyebrow text-muted">{t("entry.or")}</span>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        <form className="mt-5 space-y-4" onSubmit={handleSubmit}>
           <div>
-            <label className="text-sm font-semibold text-[var(--navy-dark)]" htmlFor="username">
-              {t("username")}
+            <label className="text-sm font-semibold text-heading" htmlFor="username">
+              {t("entry.username")}
             </label>
             <input
-              className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-3 outline-none focus:border-[var(--primary-blue)]"
+              className="mt-1.5 w-full rounded-[10px] border border-line-strong px-3.5 py-2.5 text-heading outline-none transition focus:border-primary"
               id="username"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
@@ -90,11 +187,11 @@ export const AuthGate = () => {
             />
           </div>
           <div>
-            <label className="text-sm font-semibold text-[var(--navy-dark)]" htmlFor="password">
-              {t("password")}
+            <label className="text-sm font-semibold text-heading" htmlFor="password">
+              {t("entry.password")}
             </label>
             <input
-              className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-3 outline-none focus:border-[var(--primary-blue)]"
+              className="mt-1.5 w-full rounded-[10px] border border-line-strong px-3.5 py-2.5 text-heading outline-none transition focus:border-primary"
               id="password"
               type="password"
               value={password}
@@ -109,10 +206,10 @@ export const AuthGate = () => {
             </p>
           ) : null}
           <button
-            className="w-full rounded-xl bg-[var(--secondary-purple)] px-4 py-3 font-semibold text-white transition hover:brightness-110"
+            className="w-full rounded-[11px] border border-line-outline bg-panel px-4 py-3 text-[15px] font-semibold text-heading transition hover:border-heading"
             type="submit"
           >
-            {t("signIn")}
+            {t("entry.signin")}
           </button>
         </form>
       </section>

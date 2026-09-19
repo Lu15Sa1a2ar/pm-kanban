@@ -1,14 +1,20 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+// Every entry shows the welcome panel once per tab; close it before touching the board.
+const enterAsGuest = async (page: Page) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try the demo" }).click();
+  await page.getByRole("button", { name: "Start using the board" }).click();
+  await expect(page.getByRole("button", { name: /log out/i })).toBeVisible();
+};
 
 test("persists a card through the real container", async ({ page }) => {
   // Each run gets a fresh guest board, which is deleted an hour later.
   const cardTitle = `Container persistence test ${Date.now()}`;
 
-  await page.goto("/");
-  await page.getByRole("button", { name: "Try the demo" }).click();
+  await enterAsGuest(page);
 
   const firstColumn = page.locator('[data-testid="column-col-backlog"]');
-  await expect(page.getByRole("button", { name: /log out/i })).toBeVisible();
   await firstColumn.getByRole("button", { name: /add a card/i }).click();
   await firstColumn.getByPlaceholder("Card title").fill(cardTitle);
   await firstColumn.getByPlaceholder("Details").fill("Stored in the database.");
@@ -45,10 +51,9 @@ test("persists a card through the real container", async ({ page }) => {
 });
 
 test("uses the real AI chat endpoint", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Try the demo" }).click();
+  await enterAsGuest(page);
 
-  await page.getByLabel("AI question").fill("Explain this board: list every column with one line each.");
+  await page.getByLabel("Ask about the board or request a card change").fill("Explain this board: list every column with one line each.");
   const chatResponse = page.waitForResponse("**/api/ai/chat");
   await page.getByRole("button", { name: "Send" }).click();
   expect((await chatResponse).status()).toBe(200);
@@ -67,10 +72,8 @@ test("gives each guest an independent board that survives a reload", async ({ br
   const firstPage = await first.newPage();
   const secondPage = await second.newPage();
 
-  await firstPage.goto("/");
-  await firstPage.getByRole("button", { name: "Try the demo" }).click();
+  await enterAsGuest(firstPage);
   const firstColumn = firstPage.locator('[data-testid="column-col-backlog"]');
-  await expect(firstPage.getByRole("button", { name: /log out/i })).toBeVisible();
   await firstColumn.getByRole("button", { name: /add a card/i }).click();
   await firstColumn.getByPlaceholder("Card title").fill(cardTitle);
   const saved = firstPage.waitForResponse(
@@ -83,9 +86,7 @@ test("gives each guest an independent board that survives a reload", async ({ br
   await firstPage.reload();
   await expect(firstPage.getByText(cardTitle)).toBeVisible();
 
-  await secondPage.goto("/");
-  await secondPage.getByRole("button", { name: "Try the demo" }).click();
-  await expect(secondPage.getByRole("button", { name: /log out/i })).toBeVisible();
+  await enterAsGuest(secondPage);
   await expect(secondPage.locator('[data-testid^="column-"]')).toHaveCount(5);
   await expect(secondPage.getByText(cardTitle)).toHaveCount(0);
 

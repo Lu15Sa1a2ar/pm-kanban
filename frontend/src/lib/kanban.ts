@@ -166,3 +166,44 @@ export const createId = (prefix: string) => {
   const timePart = Date.now().toString(36);
   return `${prefix}-${randomPart}${timePart}`;
 };
+
+// Ids of the cards that were added, moved (to another column, or reordered
+// among the cards that stayed in the same column) or edited between two boards.
+// Used to mark what the copilot changed without relying on the model naming
+// the cards. A card leaving or entering a column does not count as a move of
+// its neighbours.
+export const diffBoards = (previous: BoardData, next: BoardData): string[] => {
+  const columnOf = (board: BoardData) => {
+    const columns = new Map<string, string>();
+    board.columns.forEach((column) => column.cardIds.forEach((cardId) => columns.set(cardId, column.id)));
+    return columns;
+  };
+  const columnBefore = columnOf(previous);
+  const columnAfter = columnOf(next);
+  const stayed = (cardId: string) => columnBefore.get(cardId) === columnAfter.get(cardId);
+
+  const positionOf = (board: BoardData) => {
+    const positions = new Map<string, number>();
+    board.columns.forEach((column) =>
+      column.cardIds.filter(stayed).forEach((cardId, index) => positions.set(cardId, index))
+    );
+    return positions;
+  };
+  const positionBefore = positionOf(previous);
+  const positionAfter = positionOf(next);
+
+  return Object.values(next.cards)
+    .filter((card) => {
+      const previousCard = previous.cards[card.id];
+      if (!previousCard) {
+        return true;
+      }
+      return (
+        previousCard.title !== card.title ||
+        previousCard.details !== card.details ||
+        !stayed(card.id) ||
+        positionBefore.get(card.id) !== positionAfter.get(card.id)
+      );
+    })
+    .map((card) => card.id);
+};

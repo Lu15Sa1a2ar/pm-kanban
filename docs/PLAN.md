@@ -473,74 +473,74 @@ The design is approved. This phase applies it to the existing components without
 
 **Tokens**
 
-- [ ] Add the palette in Appendix A as CSS variables in `globals.css` and expose them through the Tailwind theme. Read the existing values first: most of these already exist under some name (`--accent-yellow`, `--primary-blue`, `--secondary-purple`, `--navy-dark`, `--gray-text`, `--surface`, `--surface-strong`, `--stroke`, `--shadow`), so reuse the existing variable rather than adding a duplicate.
-- [ ] Add `--copilot` (#7A3E9D), `--copilot-bg` (#F3E8FA) and `--copilot-text` (#5B2A78). These are the only genuinely new tokens.
-- [ ] Change the card detail colour to `#627D98`. The current gold tone sits near 3:1 on white and fails the contrast floor for text that size.
-- [ ] Confirm which font family is actually loaded. The mockups use Plus Jakarta Sans, matched by eye from the screenshots; the app already loads Manrope (`--font-body`) and Space Grotesk (`--font-display`) through `next/font` in `layout.tsx`, so keep them and ignore the mockup's font.
+- [x] Add the palette in Appendix A as CSS variables in `globals.css` and expose them through the Tailwind theme. Read the existing values first: most of these already exist under some name (`--accent-yellow`, `--primary-blue`, `--secondary-purple`, `--navy-dark`, `--gray-text`, `--surface`, `--surface-strong`, `--stroke`, `--shadow`), so reuse the existing variable rather than adding a duplicate. Done in `globals.css`: the old names are remapped to the new values and exposed through `@theme inline` as `bg-panel`, `text-heading`, `text-body`, `text-support`, `text-muted`, `bg-primary`, `text-link`, `bg-marker`, `bg-copilot` and so on. Four text tokens sit one step darker than the mockup because axe measured them under 4.5:1 on the page background: support `#627D98` -> `#56718C`, muted `#829AB1` -> `#587390`, primary action `#2196D6` -> `#1479B8` (white text on it was 3.28:1), link `#1479B8` -> `#1170AD`. Everything else is verbatim.
+- [x] Add `--copilot` (#7A3E9D), `--copilot-bg` (#F3E8FA) and `--copilot-text` (#5B2A78). These are the only genuinely new tokens.
+- [x] Change the card detail colour to `#627D98`. The current gold tone sits near 3:1 on white and fails the contrast floor for text that size. Applied as `--support` (see the contrast note above).
+- [x] Confirm which font family is actually loaded. The mockups use Plus Jakarta Sans, matched by eye from the screenshots; the app already loads Manrope (`--font-body`) and Space Grotesk (`--font-display`) through `next/font` in `layout.tsx`, so keep them and ignore the mockup's font. Kept Manrope and Space Grotesk.
 
 **Entry screen (`AuthGate`)**
 
-- [ ] Replace the single centred card with a two-column layout: content on the left, the access card on the right. Below 1024px the two stack, content first.
-- [ ] Left column: eyebrow, `Kanban Studio`, two short paragraphs, a sample exchange with the copilot showing two cards carrying the purple marker, three things to try, and the stack line with the source link.
-- [ ] Right column: keep `Try the demo` as the primary blue button and the one-hour note underneath, keep the `OR` divider and the username and password fields.
-- [ ] `Sign in` becomes an outlined button (border `#BCCCDC`, text `#102A43`). It gives up the purple and stops competing with `Try the demo`, which is the primary path.
-- [ ] Move the EN/ES toggle into the access card header so it is visible without scrolling on a phone.
+- [x] Replace the single centred card with a two-column layout: content on the left, the access card on the right. Below 1024px the two stack, content first. `grid lg:grid-cols-[minmax(0,1fr)_400px]`, stacked below 1024px.
+- [x] Left column: eyebrow, `Kanban Studio`, two short paragraphs, a sample exchange with the copilot showing two cards carrying the purple marker, three things to try, and the stack line with the source link.
+- [x] Right column: keep `Try the demo` as the primary blue button and the one-hour note underneath, keep the `OR` divider and the username and password fields.
+- [x] `Sign in` becomes an outlined button (border `#BCCCDC`, text `#102A43`). It gives up the purple and stops competing with `Try the demo`, which is the primary path.
+- [x] Move the EN/ES toggle into the access card header so it is visible without scrolling on a phone. New `LanguageToggle` (segmented EN | ES with `aria-pressed`), shared with the board header.
 
 **Welcome panel (new component)**
 
-- [ ] Add `WelcomePanel`: a modal shown once per session, over the board, immediately after entering, for guests and for signed-in users alike.
-- [ ] Content per Appendix C: heading, one lead line, three items (move a card, tell the copilot, reload), a primary `Start using the board` button and the source link.
-- [ ] Gate it on `sessionStorage`, not `localStorage`, so a live demo always shows it on a fresh tab while a reload inside the same session does not.
-- [ ] Close on the button, on the close control, on Escape, and on a click on the backdrop.
+- [x] Add `WelcomePanel`: a modal shown once per session, over the board, immediately after entering, for guests and for signed-in users alike. Rendered by `AuthGate` next to the board for guests and signed-in users.
+- [x] Content per Appendix C: heading, one lead line, three items (move a card, tell the copilot, reload), a primary `Start using the board` button and the source link.
+- [x] Gate it on `sessionStorage`, not `localStorage`, so a live demo always shows it on a fresh tab while a reload inside the same session does not. Key `pm-welcome-seen`.
+- [x] Close on the button, on the close control, on Escape, and on a click on the backdrop.
 
 **Board header**
 
-- [ ] Rebuild the header as one white rounded panel with two rows separated by a hairline, replacing the current four-row block.
-- [ ] Row one: eyebrow, title, the description on a single line, and the Focus block on the right.
-- [ ] Row two: the column pills on the left, then the session countdown, the EN/ES toggle and `Log out` grouped together on the right. The two controls currently sit in opposite corners.
-- [ ] Each pill carries its column's card count and greys out (dot `#DFE6EE`, text `#829AB1`) when the count is zero, so the row stops repeating the column headers and becomes a board summary.
-- [ ] Fix the card count grammar: `1 card`, not `1 cards`. Zero reads as `No cards`.
+- [x] Rebuild the header as one white rounded panel with two rows separated by a hairline, replacing the current four-row block.
+- [x] Row one: eyebrow, title, the description on a single line, and the Focus block on the right.
+- [x] Row two: the column pills on the left, then the session countdown, the EN/ES toggle and `Log out` grouped together on the right. The two controls currently sit in opposite corners. The countdown needs the session expiry, which no API route exposes; `AuthGate` stores the guest start time in `localStorage` (keyed by the guest username) when `POST /api/auth/guest` returns and derives `startedAt + 1 h`, so it survives a reload and is only shown for guests. Exposing `expires_at` on `/api/me` would make it exact; not done because this phase changes no API route.
+- [x] Each pill carries its column's card count and greys out (dot `#DFE6EE`, text `#829AB1`) when the count is zero, so the row stops repeating the column headers and becomes a board summary.
+- [x] Fix the card count grammar: `1 card`, not `1 cards`. Zero reads as `No cards`. `cardCountLabel` in `lib/i18n.tsx`, used by the pills and the column heads. The same rule was applied to the copilot summary (`copilot.updated.one`).
 
 **Board layout and the copilot panel**
 
-- [ ] Put the copilot beside the columns instead of below them: a flex row holding the column grid and a 340px panel, gap 20.
-- [ ] The copilot is its own white rounded panel with the same border and radius as a column, inside the page padding. It is not a flush sidebar against the window edge.
-- [ ] An empty column renders a short dashed strip, not a full-height well. This is what lets five columns and the copilot share one screen.
-- [ ] Below 1280px the copilot moves under the board at full width. Below 768px the columns scroll horizontally with scroll snap.
-- [ ] Panel head: the purple marker, `Board copilot`, and the message counter on the right.
+- [x] Put the copilot beside the columns instead of below them: a flex row holding the column grid and a 340px panel, gap 20.
+- [x] The copilot is its own white rounded panel with the same border and radius as a column, inside the page padding. It is not a flush sidebar against the window edge.
+- [x] An empty column renders a short dashed strip, not a full-height well. This is what lets five columns and the copilot share one screen. The column grid uses `items-start`, so each column takes only the height of its content.
+- [x] Below 1280px the copilot moves under the board at full width. Below 768px the columns scroll horizontally with scroll snap.
+- [x] Panel head: the purple marker, `Board copilot`, and the message counter on the right. The counter counts the messages sent from this tab; it resets on a reload while the backend keeps counting per session.
 
 **The copilot marker**
 
-- [ ] After a successful board update from the copilot, diff the previous board against the new one and collect the ids of the cards that were added, moved or edited. Do not depend on the model naming them.
-- [ ] Marked cards render a 4px purple bar on the top edge, a raised shadow, and the `Moved by the copilot` chip. The mark clears after 8 seconds, and immediately if the user touches the card.
-- [ ] The copilot's reply ends with a summary strip stating how many cards changed.
-- [ ] Respect `prefers-reduced-motion`: no movement, the mark simply appears and disappears.
+- [x] After a successful board update from the copilot, diff the previous board against the new one and collect the ids of the cards that were added, moved or edited. Do not depend on the model naming them. `diffBoards` in `lib/kanban.ts`: added, edited, moved to another column, or reordered among the cards that stayed in the same column; a card leaving or entering a column does not mark its neighbours. The sidebar computes the diff and hands the ids to `KanbanBoard`.
+- [x] Marked cards render a 4px purple bar on the top edge, a raised shadow, and the `Moved by the copilot` chip. The mark clears after 8 seconds, and immediately if the user touches the card. The bar is an inset shadow so the mark never shifts the layout. Cleared by `pointerdown` or focus on the card.
+- [x] The copilot's reply ends with a summary strip stating how many cards changed.
+- [x] Respect `prefers-reduced-motion`: no movement, the mark simply appears and disappears. `motion-safe:` variants only; the welcome panel animation is also `motion-safe`.
 
 **Footer (new component)**
 
-- [ ] Add `SiteFooter`: a white rounded panel at the bottom of the board page with four blocks, then a hairline and a bottom strip.
-- [ ] Blocks: who built it with the LinkedIn and GitHub links, then frontend, backend, and data and copilot.
-- [ ] Bottom strip: the demo-deletion note on the left, and the measured numbers on the right.
-- [ ] Put the test count and the timing numbers in one exported constant so they are updated in one place. They came from the Part 14 and Part 15 runs and will drift.
+- [x] Add `SiteFooter`: a white rounded panel at the bottom of the board page with four blocks, then a hairline and a bottom strip.
+- [x] Blocks: who built it with the LinkedIn and GitHub links, then frontend, backend, and data and copilot.
+- [x] Bottom strip: the demo-deletion note on the left, and the measured numbers on the right.
+- [x] Put the test count and the timing numbers in one exported constant so they are updated in one place. They came from the Part 14 and Part 15 runs and will drift. `lib/facts.ts` (name, links, 114 automated tests = 48 pytest + 49 Vitest + 12 mocked Playwright + 5 integrated Playwright, 290 ms, 1.9 s, 10 messages).
 - [x] Name and LinkedIn URL provided by the user on 2026-09-18: `Luis Salazar`, `https://www.linkedin.com/in/luis-alberto-salazar`. The footer uses these values (the mockup carried `[YOUR NAME]` and an empty profile link).
 
 **Copy**
 
-- [ ] Add every key in Appendix C to `lib/i18n.tsx` in both languages. No new string is hardcoded in a component.
+- [x] Add every key in Appendix C to `lib/i18n.tsx` in both languages. No new string is hardcoded in a component. Plus the keys the components already needed (field labels, error messages, edit hints, `entry.sample.card1/2`, `entry.try.heading`, `copilot.updated.one`). `t(key, params)` interpolates `{name}` placeholders; the old flat keys were removed. The dnd-kit `role="button"` on cards was dropped (only the pointer sensor is configured) because axe flagged the Remove button as an interactive control nested in another one; Remove now sits under the notes so the title keeps the card width.
 
 ### Tests
 
-- [ ] Frontend unit: `AuthGate` renders both columns, the demo button still calls the guest route, and `Sign in` still posts the credentials.
-- [ ] Frontend unit: `WelcomePanel` renders on first entry, does not render on a second mount within the same session, closes on Escape, and returns focus to the element that had it before opening.
-- [ ] Frontend unit: the column pill shows `1 card` for one card and `No cards` for zero, and applies the muted style at zero.
-- [ ] Frontend unit: given a previous board and a copilot update, the diff returns exactly the ids of the cards that changed, and a card whose id is in that set renders the chip.
-- [ ] Frontend unit: the mark clears after the timeout, using fake timers.
-- [ ] Frontend unit: every visible string resolves through the i18n dictionary in both languages, with no missing key.
-- [ ] Playwright mocked E2E: the welcome panel appears after entering as a guest, closes on the button, and does not reappear on a reload in the same session.
-- [ ] Playwright integrated E2E against local Docker: send an instruction that moves a card, and confirm the moved card carries the marker and that the board still matches after a reload.
-- [ ] Playwright at 390px: the columns scroll horizontally, the copilot sits below the board, and no element overflows the viewport width.
-- [ ] Axe or an equivalent check on the entry screen, the board and the open welcome panel: no contrast failures, every control reachable by keyboard, visible focus.
-- [ ] Full suites pass locally against SQLite, then on Docker, then on production after the deploy.
+- [x] Frontend unit: `AuthGate` renders both columns, the demo button still calls the guest route, and `Sign in` still posts the credentials. `AuthGate.test.tsx`.
+- [x] Frontend unit: `WelcomePanel` renders on first entry, does not render on a second mount within the same session, closes on Escape, and returns focus to the element that had it before opening. `WelcomePanel.test.tsx` (6 tests, including backdrop click and the Tab trap).
+- [x] Frontend unit: the column pill shows `1 card` for one card and `No cards` for zero, and applies the muted style at zero. `KanbanBoard.copilot.test.tsx`.
+- [x] Frontend unit: given a previous board and a copilot update, the diff returns exactly the ids of the cards that changed, and a card whose id is in that set renders the chip. `kanban.test.ts` (4 diff cases) and `KanbanBoard.copilot.test.tsx`.
+- [x] Frontend unit: the mark clears after the timeout, using fake timers. Also: the mark clears on pointer down.
+- [x] Frontend unit: every visible string resolves through the i18n dictionary in both languages, with no missing key. `i18n.test.tsx`: same key set in both languages, no empty value, same placeholders, interpolation, plurals. Vitest 49/49.
+- [x] Playwright mocked E2E: the welcome panel appears after entering as a guest, closes on the button, and does not reappear on a reload in the same session. `tests/kanban.spec.ts`; the other mocked tests dismiss the panel through a shared helper.
+- [x] Playwright integrated E2E against local Docker: send an instruction that moves a card, and confirm the moved card carries the marker and that the board still matches after a reload. `tests/integrated/assistant.spec.ts` step 4 asserts `data-marked`, the chip, exactly one marked card and the summary strip; step 6 compares the Done column before and after the reload and checks that neither the marks nor the panel come back. 4/4 on Docker (+ the headers test skipped off-Vercel).
+- [x] Playwright at 390px: the columns scroll horizontally, the copilot sits below the board, and no element overflows the viewport width. `tests/layout.spec.ts`: also the stacked entry screen at 390px and the side-by-side layout at 1440px (copilot 340px wide, footer in the viewport).
+- [x] Axe or an equivalent check on the entry screen, the board and the open welcome panel: no contrast failures, every control reachable by keyboard, visible focus. `@axe-core/playwright` (wcag2a + wcag2aa) on the three states in `tests/layout.spec.ts`, plus a keyboard pass: focus trapped in the panel, Escape closes it, EN, ES and Log out reachable with a visible outline. Clean after the four token adjustments.
+- [ ] Full suites pass locally against SQLite, then on Docker, then on production after the deploy. Local and Docker done on 2026-09-18: backend 48/48, Vitest 49/49, mocked Playwright 12/12, integrated 4/4 on Docker (SQLite). Production pending the deploy.
 - [ ] Functional test (manual, by the user, local Docker then production): enter as a guest in English and in Spanish; confirm the welcome panel shows once; move a card and confirm it is marked and the mark fades; reload and confirm the board persists and the panel does not return; check the header and footer on a desktop window and on a phone-width window.
 
 ### Success criteria

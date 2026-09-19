@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import clsx from "clsx";
 import {
   DndContext,
   DragOverlay,
@@ -14,24 +15,35 @@ import {
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { SiteFooter } from "@/components/SiteFooter";
 import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
 import { getBoard, saveBoard } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { cardCountLabel, useI18n } from "@/lib/i18n";
+
+export const COPILOT_MARK_MS = 8000;
+
+const minutesLeft = (expiresAt: number, now: number) => Math.max(0, Math.ceil((expiresAt - now) / 60_000));
 
 export const KanbanBoard = ({
   onLogout = () => undefined,
   remote = false,
+  sessionExpiresAt,
 }: {
   onLogout?: () => void | Promise<void>;
   remote?: boolean;
+  sessionExpiresAt?: number;
 }) => {
   const [board, setBoard] = useState<BoardData>(() => initialData);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(remote);
   const [saveError, setSaveError] = useState("");
-  const { language, setLanguage, t } = useI18n();
+  const [markedCardIds, setMarkedCardIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [now, setNow] = useState(() => Date.now());
+  const { t } = useI18n();
   const hasLoadedRemoteBoard = useRef(!remote);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -53,15 +65,26 @@ export const KanbanBoard = ({
         setIsLoading(false);
       })
       .catch(() => {
-        setSaveError(t("boardLoadError"));
+        setSaveError(t("board.load.error"));
         setIsLoading(false);
       });
   }, [remote, t]);
 
   useEffect(() => {
+    if (!sessionExpiresAt) {
+      return;
+    }
+    const interval = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(interval);
+  }, [sessionExpiresAt]);
+
+  useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
+      }
+      if (markTimeoutRef.current) {
+        clearTimeout(markTimeoutRef.current);
       }
     };
   }, []);
@@ -73,7 +96,7 @@ export const KanbanBoard = ({
       }
       saveBoard(nextBoard)
         .then(() => setSaveError(""))
-        .catch(() => setSaveError(t("boardSaveError")));
+        .catch(() => setSaveError(t("board.save.error")));
     },
     [remote, t]
   );
@@ -90,6 +113,28 @@ export const KanbanBoard = ({
     },
     [remote, persistBoard]
   );
+
+  // The backend already saved the copilot's board; here it only replaces the
+  // local state and marks the changed cards for a few seconds.
+  const handleCopilotUpdate = useCallback((nextBoard: BoardData, changedCardIds: string[]) => {
+    setBoard(nextBoard);
+    setMarkedCardIds(new Set(changedCardIds));
+    if (markTimeoutRef.current) {
+      clearTimeout(markTimeoutRef.current);
+    }
+    markTimeoutRef.current = setTimeout(() => setMarkedCardIds(new Set()), COPILOT_MARK_MS);
+  }, []);
+
+  const handleTouchCard = useCallback((cardId: string) => {
+    setMarkedCardIds((current) => {
+      if (!current.has(cardId)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(cardId);
+      return next;
+    });
+  }, []);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -174,91 +219,92 @@ export const KanbanBoard = ({
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
 
   if (isLoading) {
-    return <div className="min-h-screen bg-[var(--surface)]" aria-busy="true" />;
+    return <div className="min-h-screen bg-page" aria-busy="true" />;
   }
 
   return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
-
-      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                {t("singleBoard")}
-              </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                {t("title")}
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                {t("boardDescription")}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                {t("focus")}
-              </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                {t("focusValue")}
-              </p>
-            </div>
+    <main className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col gap-4 px-5 py-5 sm:px-6">
+      <header className="rounded-2xl border border-line bg-panel">
+        <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <p className="eyebrow text-muted">{t("entry.eyebrow")}</p>
+            <h1 className="mt-1.5 font-display text-[28px] font-bold leading-[1.1] text-heading">{t("title")}</h1>
+            <p className="mt-1.5 text-sm leading-6 text-body lg:truncate">{t("board.description")}</p>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-4">
-            {board.columns.map((column) => (
-              <div
-                key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
-              >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
-              </div>
-            ))}
-            </div>
+          <div className="shrink-0 rounded-[10px] bg-focus-bg px-4 py-3">
+            <p className="eyebrow text-link">{t("board.focus")}</p>
+            <p className="mt-1 text-[15px] font-semibold text-link">{t("board.focus.value")}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-3.5 sm:px-6">
+          <ul className="flex flex-wrap gap-2">
+            {board.columns.map((column) => {
+              const count = column.cardIds.length;
+              return (
+                <li
+                  key={column.id}
+                  data-testid={`pill-${column.id}`}
+                  data-empty={count === 0 ? "true" : undefined}
+                  className={clsx(
+                    "flex items-center gap-2 rounded-full border border-line px-3 py-1.5 text-xs font-semibold",
+                    count === 0 ? "text-muted" : "text-heading"
+                  )}
+                >
+                  <span
+                    className={clsx("h-2 w-2 rounded-full", count === 0 ? "bg-pill-muted" : "bg-marker")}
+                    aria-hidden="true"
+                  />
+                  <span>{column.title}</span>
+                  <span className="font-normal text-muted">{cardCountLabel(t, count)}</span>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex flex-wrap items-center gap-3">
+            {sessionExpiresAt ? (
+              <span className="text-xs font-semibold text-support" data-testid="session-countdown">
+                {t("board.session", { minutes: minutesLeft(sessionExpiresAt, now) })}
+              </span>
+            ) : null}
+            <LanguageToggle />
             <button
-              className="rounded-xl border border-[var(--stroke)] px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] hover:border-[var(--primary-blue)]"
+              className="rounded-lg border border-line-outline px-3.5 py-2 text-sm font-semibold text-heading transition hover:border-heading"
               onClick={onLogout}
               type="button"
             >
-              {t("logout")}
+              {t("board.logout")}
             </button>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="font-semibold text-[var(--gray-text)]">{language.toUpperCase()}</span>
-            <button
-              className="rounded-lg border border-[var(--stroke)] px-3 py-1 font-semibold text-[var(--navy-dark)] hover:border-[var(--primary-blue)]"
-              onClick={() => setLanguage(language === "en" ? "es" : "en")}
-              type="button"
-              aria-label="Change language"
-            >
-              {language === "en" ? "ES" : "EN"}
-            </button>
-          </div>
-          {saveError ? (
-            <p className="text-sm font-semibold text-red-700" role="alert">
-              {saveError}
-            </p>
-          ) : null}
-        </header>
+        </div>
+        {saveError ? (
+          <p className="border-t border-line px-5 py-3 text-sm font-semibold text-red-700 sm:px-6" role="alert">
+            {saveError}
+          </p>
+        ) : null}
+      </header>
 
+      <div className="flex flex-col gap-5 xl:flex-row xl:items-start">
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <section className="grid gap-6 lg:grid-cols-5">
+          <section
+            className="flex min-w-0 flex-1 snap-x snap-mandatory gap-3.5 overflow-x-auto pb-2 md:grid md:grid-cols-5 md:items-start md:overflow-visible md:pb-0"
+            data-testid="board-columns"
+          >
             {board.columns.map((column) => (
               <KanbanColumn
                 key={column.id}
                 column={column}
                 cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                markedCardIds={markedCardIds}
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}
                 onDeleteCard={handleDeleteCard}
                 onEditCard={handleEditCard}
+                onTouchCard={handleTouchCard}
               />
             ))}
           </section>
@@ -270,8 +316,10 @@ export const KanbanBoard = ({
             ) : null}
           </DragOverlay>
         </DndContext>
-        {remote ? <AIChatSidebar onBoardUpdate={setBoard} /> : null}
-      </main>
-    </div>
+        {remote ? <AIChatSidebar board={board} onBoardUpdate={handleCopilotUpdate} /> : null}
+      </div>
+
+      <SiteFooter />
+    </main>
   );
 };

@@ -4,24 +4,28 @@ import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable"
 import type { Card, Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
-import { useI18n } from "@/lib/i18n";
+import { cardCountLabel, useI18n } from "@/lib/i18n";
 
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
+  markedCardIds?: ReadonlySet<string>;
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
   onEditCard: (cardId: string, title: string, details: string) => void;
+  onTouchCard?: (cardId: string) => void;
 };
 
 export const KanbanColumn = ({
   column,
   cards,
+  markedCardIds,
   onRename,
   onAddCard,
   onDeleteCard,
   onEditCard,
+  onTouchCard,
 }: KanbanColumnProps) => {
   const { t } = useI18n();
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -30,41 +34,37 @@ export const KanbanColumn = ({
     <section
       ref={setNodeRef}
       className={clsx(
-        "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
-        isOver && "ring-2 ring-[var(--accent-yellow)]"
+        "flex w-[260px] shrink-0 snap-start flex-col rounded-[14px] border border-line bg-panel px-[13px] py-3.5 transition md:w-auto md:shrink",
+        isOver && "ring-2 ring-marker"
       )}
       data-testid={`column-${column.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="w-full">
-          <div className="flex items-center gap-3">
-            <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-              {cards.length} {t("cards")}
-            </span>
-          </div>
-          <input
-            value={column.title}
-            onChange={(event) => onRename(column.id, event.target.value)}
-            className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
-            aria-label="Column title"
-          />
-        </div>
+      <div className="flex items-center gap-3">
+        <div className="h-1.5 w-8 rounded-full bg-marker" aria-hidden="true" />
+        <span className="eyebrow text-muted">{cardCountLabel(t, cards.length)}</span>
       </div>
-      <div className="mt-4 flex flex-1 flex-col gap-3">
+      <input
+        value={column.title}
+        onChange={(event) => onRename(column.id, event.target.value)}
+        className="mt-2 w-full rounded-md bg-transparent font-display text-base font-bold text-heading outline-none"
+        aria-label={t("board.column.title")}
+      />
+      <div className="mt-3 flex flex-col gap-2.5">
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <KanbanCard
               key={card.id}
               card={card}
+              marked={markedCardIds?.has(card.id) ?? false}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
               onEdit={onEditCard}
+              onTouch={onTouchCard}
             />
           ))}
         </SortableContext>
         {cards.length === 0 && (
-          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--stroke)] px-3 py-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-            {t("dropCard")}
+          <div className="rounded-[11px] border border-dashed border-line-strong px-3 py-3 text-center text-xs font-semibold text-muted">
+            {t("board.drop")}
           </div>
         )}
       </div>

@@ -9,11 +9,13 @@ type EditableField = "title" | "details";
 
 type KanbanCardProps = {
   card: Card;
+  marked?: boolean;
   onDelete: (cardId: string) => void;
   onEdit: (cardId: string, title: string, details: string) => void;
+  onTouch?: (cardId: string) => void;
 };
 
-export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
+export const KanbanCard = ({ card, marked = false, onDelete, onEdit, onTouch }: KanbanCardProps) => {
   const { t } = useI18n();
   const [editingField, setEditingField] = useState<EditableField | null>(null);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -45,73 +47,90 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
     }
   };
 
-  const dragProps = editingField ? {} : { ...attributes, ...listeners };
+  // Only the pointer sensor is configured, so the card is not a keyboard-operable
+  // button: dropping dnd-kit's role and tabIndex keeps the inner Remove button
+  // from being an interactive control nested inside another one.
+  const dragProps = editingField ? {} : { ...attributes, ...listeners, role: undefined, tabIndex: undefined };
+  const touch = () => {
+    if (marked) {
+      onTouch?.(card.id);
+    }
+  };
 
   return (
     <article
       ref={setNodeRef}
       style={style}
       className={clsx(
-        "rounded-2xl border border-transparent bg-white px-4 py-4 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
-        "transition-all duration-150",
-        isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]"
+        "rounded-[11px] border border-line bg-panel px-3 py-[11px] motion-safe:transition-shadow motion-safe:duration-200",
+        // The purple bar is an inset shadow so the mark never shifts the layout.
+        marked
+          ? "shadow-[inset_0_4px_0_var(--copilot),var(--shadow-card-copilot)]"
+          : "shadow-card",
+        isDragging && "opacity-60"
       )}
       {...dragProps}
+      onPointerDownCapture={touch}
+      onFocusCapture={touch}
       data-testid={`card-${card.id}`}
+      data-marked={marked ? "true" : undefined}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          {editingField === "title" ? (
-            <input
-              autoFocus
-              defaultValue={card.title}
-              onBlur={(event) => commit("title", event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  event.currentTarget.blur();
-                }
-                cancelOnEscape(event, card.title);
-              }}
-              aria-label={t("editTitle")}
-              className="w-full rounded-lg border border-[var(--primary-blue)] bg-white px-2 py-1 font-display text-base font-semibold text-[var(--navy-dark)] outline-none"
-            />
-          ) : (
-            <h4
-              onDoubleClick={() => setEditingField("title")}
-              title={t("doubleClickToEdit")}
-              className="cursor-text font-display text-base font-semibold text-[var(--navy-dark)]"
-            >
-              {card.title}
-            </h4>
-          )}
-          {editingField === "details" ? (
-            <textarea
-              autoFocus
-              defaultValue={card.details}
-              rows={3}
-              onBlur={(event) => commit("details", event.target.value)}
-              onKeyDown={(event) => cancelOnEscape(event, card.details)}
-              aria-label={t("editDetails")}
-              className="mt-2 w-full resize-none rounded-lg border border-[var(--primary-blue)] bg-white px-2 py-1 text-sm leading-6 text-[var(--gray-text)] outline-none"
-            />
-          ) : (
-            <p
-              onDoubleClick={() => setEditingField("details")}
-              title={t("doubleClickToEdit")}
-              className="mt-2 cursor-text text-sm leading-6 text-[var(--gray-text)]"
-            >
-              {card.details}
-            </p>
-          )}
-        </div>
+      {marked ? (
+        <span className="mb-2 inline-block rounded-full bg-copilot-bg px-2 py-0.5 text-[11px] font-semibold text-copilot-text">
+          {t("card.copilot.chip")}
+        </span>
+      ) : null}
+      {editingField === "title" ? (
+        <input
+          autoFocus
+          defaultValue={card.title}
+          onBlur={(event) => commit("title", event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+            cancelOnEscape(event, card.title);
+          }}
+          aria-label={t("card.edit.title")}
+          className="w-full rounded-md border border-primary bg-panel px-2 py-1 text-sm font-semibold text-heading outline-none"
+        />
+      ) : (
+        <h4
+          onDoubleClick={() => setEditingField("title")}
+          title={t("card.edit.hint")}
+          className="cursor-text text-sm font-semibold text-heading"
+        >
+          {card.title}
+        </h4>
+      )}
+      {editingField === "details" ? (
+        <textarea
+          autoFocus
+          defaultValue={card.details}
+          rows={3}
+          onBlur={(event) => commit("details", event.target.value)}
+          onKeyDown={(event) => cancelOnEscape(event, card.details)}
+          aria-label={t("card.edit.details")}
+          className="mt-1.5 w-full resize-none rounded-md border border-primary bg-panel px-2 py-1 text-[12.5px] leading-[1.45] text-support outline-none"
+        />
+      ) : (
+        <p
+          onDoubleClick={() => setEditingField("details")}
+          title={t("card.edit.hint")}
+          className="mt-1.5 cursor-text text-[12.5px] leading-[1.45] text-support"
+        >
+          {card.details}
+        </p>
+      )}
+      <div className="mt-1.5 flex justify-end">
         <button
           type="button"
           onClick={() => onDelete(card.id)}
-          className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
-          aria-label={`${t("remove")} ${card.title}`}
+          className="-mb-1 -mr-1.5 rounded-md px-1.5 py-1 text-xs font-semibold text-link transition hover:bg-page"
+          aria-label={`${t("card.remove")} ${card.title}`}
         >
-          {t("remove")}
+          {t("card.remove")}
         </button>
       </div>
     </article>

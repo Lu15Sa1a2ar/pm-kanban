@@ -51,11 +51,17 @@ const waitForBoardSave = (page: Page) =>
       response.url().includes("/api/board") && response.request().method() === "PUT"
   );
 
+const dismissWelcome = async (page: Page) => {
+  await page.getByRole("button", { name: "Start using the board" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+};
+
 const signIn = async (page: Page) => {
   await page.getByLabel("Username").fill("user");
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
+  await dismissWelcome(page);
 };
 
 test("loads the kanban board", async ({ page }) => {
@@ -69,10 +75,27 @@ test("loads the kanban board", async ({ page }) => {
 test("enters the board as a guest without credentials", async ({ page }) => {
   await setupApiMock(page);
   await page.goto("/");
-  await expect(page.getByText(/demo session lasts 1 hour/i)).toBeVisible();
+  await expect(page.getByText(/demo session lasts one hour/i)).toBeVisible();
   await page.getByRole("button", { name: "Try the demo" }).click();
   await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
+  await dismissWelcome(page);
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
+});
+
+test("shows the welcome panel once per session", async ({ page }) => {
+  await setupApiMock(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try the demo" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "This board is yours for the next hour." });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await page.getByRole("button", { name: "Start using the board" }).click();
+  await expect(dialog).toHaveCount(0);
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
 test("rejects invalid credentials and supports logout", async ({ page }) => {
@@ -87,6 +110,7 @@ test("rejects invalid credentials and supports logout", async ({ page }) => {
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
+  await dismissWelcome(page);
   await page.getByRole("button", { name: "Log out" }).click();
   await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
 });

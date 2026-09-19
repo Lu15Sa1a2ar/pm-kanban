@@ -1,20 +1,64 @@
 @import "tailwindcss";
 
+/* Palette from docs/PLAN.md Part 19, Appendix A. The pre-existing names are kept
+   and remapped; the copilot tokens are the only new ones. Four text tokens sit one
+   step darker than the mockup so every text/background pair in the app clears
+   WCAG AA (4.5:1) on the page background, as measured by axe:
+   support #627D98 -> #56718C, muted #829AB1 -> #587390, primary #2196D6 -> #1479B8
+   (white text on it), link #1479B8 -> #1170AD. */
 :root {
-  --accent-yellow: #ecad0a;
-  --primary-blue: #209dd7;
-  --secondary-purple: #753991;
-  --navy-dark: #032147;
-  --gray-text: #888888;
-  --surface: #f7f8fb;
+  --surface: #f4f6fa;
   --surface-strong: #ffffff;
-  --stroke: rgba(3, 33, 71, 0.08);
-  --shadow: 0 18px 40px rgba(3, 33, 71, 0.12);
+  --stroke: #e1e8f0;
+  --stroke-strong: #d9e2ec;
+  --stroke-outline: #bcccdc;
+  --navy-dark: #102a43;
+  --body: #334e68;
+  --body-strong: #243b53;
+  --support: #56718c;
+  --gray-text: #587390;
+  --muted-soft: #9fb3c8;
+  --primary-blue: #1479b8;
+  --link: #1170ad;
+  --focus-bg: #eaf6fc;
+  --accent-yellow: #f0b429;
+  --pill-muted: #dfe6ee;
+  --copilot: #7a3e9d;
+  --copilot-bg: #f3e8fa;
+  --copilot-text: #5b2a78;
+  --shadow-card: 0 1px 2px rgba(16, 42, 67, 0.06);
+  --shadow-card-copilot: 0 3px 12px rgba(122, 62, 157, 0.16);
+  --shadow: 0 18px 44px rgba(16, 42, 67, 0.1);
+  --shadow-welcome: 0 26px 68px rgba(16, 42, 67, 0.36);
+  --backdrop: rgba(16, 42, 67, 0.55);
 }
 
 @theme inline {
   --color-background: var(--surface);
   --color-foreground: var(--navy-dark);
+  --color-page: var(--surface);
+  --color-panel: var(--surface-strong);
+  --color-line: var(--stroke);
+  --color-line-strong: var(--stroke-strong);
+  --color-line-outline: var(--stroke-outline);
+  --color-heading: var(--navy-dark);
+  --color-body: var(--body);
+  --color-body-strong: var(--body-strong);
+  --color-support: var(--support);
+  --color-muted: var(--gray-text);
+  --color-muted-soft: var(--muted-soft);
+  --color-primary: var(--primary-blue);
+  --color-link: var(--link);
+  --color-focus-bg: var(--focus-bg);
+  --color-marker: var(--accent-yellow);
+  --color-pill-muted: var(--pill-muted);
+  --color-copilot: var(--copilot);
+  --color-copilot-bg: var(--copilot-bg);
+  --color-copilot-text: var(--copilot-text);
+  --shadow-card: var(--shadow-card);
+  --shadow-card-copilot: var(--shadow-card-copilot);
+  --shadow-access: var(--shadow);
+  --shadow-welcome: var(--shadow-welcome);
   --font-sans: var(--font-body);
 }
 
@@ -31,4 +75,28 @@ body {
 
 .font-display {
   font-family: var(--font-display), "Segoe UI", sans-serif;
+}
+
+/* Eyebrows and counts: 11px, 600, 0.1em uppercase. */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary-blue);
+  outline-offset: 2px;
+}
+
+@keyframes welcome-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
