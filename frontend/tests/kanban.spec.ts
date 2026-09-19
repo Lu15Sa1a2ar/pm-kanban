@@ -1,7 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { initialData } from "@/lib/kanban";
 
+const useEnglish = (page: Page) => page.addInitScript(() => window.localStorage.setItem("pm-language", "en"));
+
 const setupApiMock = async (page: Page) => {
+  await useEnglish(page);
   let authenticated = false;
   let username = "user";
   let board = structuredClone(initialData);
@@ -204,4 +207,33 @@ test("highlights the target column while dragging over one of its cards", async 
   await page.mouse.up();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
   await expect(targetColumn).not.toHaveClass(/ring-2/);
+});
+
+test("starts in Spanish and keeps the switch to English across a reload", async ({ page }) => {
+  // No stored preference: the mock is wired without the English init script.
+  let authenticated = false;
+  await page.route("**/api/me", (route) =>
+    route.fulfill({ status: authenticated ? 200 : 401, contentType: "application/json", body: JSON.stringify(authenticated ? { username: "guest-e2e" } : { detail: "Not authenticated" }) })
+  );
+  await page.route("**/api/auth/guest", (route) => {
+    authenticated = true;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username: "guest-e2e" }) });
+  });
+  await page.route("**/api/board", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(initialData) })
+  );
+
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Probar la demo" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "es");
+
+  await page.getByTestId("language-toggle").getByRole("button", { name: "EN" }).click();
+  await expect(page.getByRole("button", { name: "Try the demo" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Try the demo" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Try the demo" }).click();
+  await expect(page.getByRole("button", { name: "Start using the board" })).toBeVisible();
 });

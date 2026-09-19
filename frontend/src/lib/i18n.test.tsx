@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { cardCountLabel, I18nProvider, translate, translations, useI18n, type Translate } from "@/lib/i18n";
+import { cardCountLabel, DEFAULT_LANGUAGE, I18nProvider, LANGUAGE_KEY, storedLanguage, translate, translations, useI18n, type Translate } from "@/lib/i18n";
 
 const LanguageProbe = () => {
   const { language, setLanguage, t } = useI18n();
@@ -66,5 +66,40 @@ describe("i18n", () => {
     expect(cardCountLabel(es, 0)).toBe("Sin tarjetas");
     expect(cardCountLabel(es, 1)).toBe("1 tarjeta");
     expect(cardCountLabel(es, 4)).toBe("4 tarjetas");
+  });
+
+  it("defaults to Spanish and honours a stored preference", async () => {
+    expect(DEFAULT_LANGUAGE).toBe("es");
+    window.localStorage.removeItem(LANGUAGE_KEY);
+    expect(storedLanguage()).toBeNull();
+
+    const { unmount } = render(
+      <I18nProvider>
+        <LanguageProbe />
+      </I18nProvider>
+    );
+    expect(screen.getByText("Iniciar sesión")).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("es");
+    unmount();
+
+    window.localStorage.setItem(LANGUAGE_KEY, "en");
+    render(
+      <I18nProvider>
+        <LanguageProbe />
+      </I18nProvider>
+    );
+    expect(await screen.findByText("Sign in")).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en");
+  });
+
+  it("stores the language chosen with the toggle", async () => {
+    window.localStorage.setItem(LANGUAGE_KEY, "en");
+    render(
+      <I18nProvider>
+        <LanguageProbe />
+      </I18nProvider>
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Español" }));
+    expect(window.localStorage.getItem(LANGUAGE_KEY)).toBe("es");
   });
 });

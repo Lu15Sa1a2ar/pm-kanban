@@ -96,11 +96,22 @@ def health(authorization: str | None = Header(default=None)) -> dict[str, str]:
     with database.connect() as connection:
         connection.execute("SELECT 1").fetchone()
     if authorization is not None:
-        secret = os.getenv("CRON_SECRET")
-        if not secret or authorization != f"Bearer {secret}":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+        require_operator(authorization)
         database.delete_expired_guests()
     return {"status": "ok"}
+
+
+def require_operator(authorization: str | None) -> None:
+    secret = os.getenv("CRON_SECRET")
+    if not secret or authorization != f"Bearer {secret}":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+
+@app.get("/api/stats")
+def stats(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    """Demo starts (every click on "Try the demo") for the operator; CRON_SECRET as bearer."""
+    require_operator(authorization)
+    return database.demo_stats()
 
 
 def set_session_cookie(response: Response, session_id: str) -> None:
@@ -158,6 +169,7 @@ def guest(
 ) -> dict[str, str]:
     current = database.get_session_user(session_id) if session_id else None
     if current is not None:
+        database.record_demo_start("existing")
         return {"username": str(current["username"])}
     guest = database.create_guest(
         GUEST_SESSION_LIFETIME, client_ip(request), env_int("GUEST_RATE_LIMIT", 5)

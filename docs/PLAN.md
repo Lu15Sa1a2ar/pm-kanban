@@ -521,7 +521,7 @@ The design is approved. This phase applies it to the existing components without
 - [x] Add `SiteFooter`: a white rounded panel at the bottom of the board page with four blocks, then a hairline and a bottom strip.
 - [x] Blocks: who built it with the LinkedIn and GitHub links, then frontend, backend, and data and copilot.
 - [x] Bottom strip: the demo-deletion note on the left, and the measured numbers on the right.
-- [x] Put the test count and the timing numbers in one exported constant so they are updated in one place. They came from the Part 14 and Part 15 runs and will drift. `lib/facts.ts` (name, links, 130 automated tests = 59 pytest + 53 Vitest + 13 mocked Playwright + 5 integrated Playwright, 290 ms, 1.9 s, 10 messages).
+- [x] Put the test count and the timing numbers in one exported constant so they are updated in one place. They came from the Part 14 and Part 15 runs and will drift. `lib/facts.ts` (name, links, 136 automated tests = 62 pytest + 55 Vitest + 14 mocked Playwright + 5 integrated Playwright, 290 ms, 1.9 s, 10 messages).
 - [x] Name and LinkedIn URL provided by the user on 2026-09-18: `Luis Salazar`, `https://www.linkedin.com/in/luis-alberto-salazar`. The footer uses these values (the mockup carried `[YOUR NAME]` and an empty profile link).
 
 **Copy**
@@ -750,6 +750,32 @@ Findings accepted as-is are marked with the audit number. Two findings were reje
 - (10) Client-supplied conversation history with `assistant` turns. Kept as decided in Part 18: the history is bounded and validated (roles, sizes) and can only influence the caller's own board, which the caller can already edit directly. Persisting it server-side would add one Turso write per chat message for no security gain.
 - (15) Indexes on `guest_signups(ip, created_at)` and `sessions(expires_at)`. The tables hold tens of rows (guests live one hour and are deleted on every signup and by the daily cron), and every `CREATE INDEX IF NOT EXISTS` in `init` is one more HTTPS round trip to Turso on every cold start. Revisit only if the guest table ever grows past a few thousand rows.
 - Audit suggestions skipped for the same reason: a process-wide OpenRouter semaphore (meaningless on a per-invocation runtime), a bundle analysis (the export is already static and small), and `env_int` range validation (the variables are set by the operator, not by users).
+
+## Part 21: Spanish by default and a demo-start counter
+
+Two requests from the user after the Part 20 close-out (2026-09-19): the app should open in Spanish and let the visitor switch to English, and the user wants to know when someone clicks `Try the demo`. Neither changes the board, the copilot contract or the guest flow.
+
+### Checklist
+
+- [x] `I18nProvider` starts in Spanish (`DEFAULT_LANGUAGE = "es"`) and `<html lang>` follows the active language. The static export hydrates from the default and applies the stored choice after mount, so there is no hydration mismatch.
+- [x] The EN/ES toggle stores its choice in `localStorage` (`pm-language`) and a reload keeps it; a visitor with no stored choice always gets Spanish. Components rendered outside the provider (unit tests) fall back to the stored language or Spanish.
+- [x] Every click on `Try the demo` leaves one row in a new `demo_starts` table with the timestamp and the outcome (`created`, `rate_limited`, `existing`), written inside the guest transaction so it costs no extra Turso round trip. No IP, no user agent, no personal data. The rows survive the hourly guest cleanup.
+- [x] `GET /api/stats`, protected with `Authorization: Bearer $CRON_SECRET` (the operator secret that already exists), returns the total and a per-day breakdown by outcome for the last 30 days. Any other caller gets 401. To read it: `curl -H "Authorization: Bearer $CRON_SECRET" https://pm-kanban-tau.vercel.app/api/stats`.
+- [x] The Playwright suites keep their English selectors by setting the stored preference through `page.addInitScript` before the first navigation; the unit test setup does the same with `localStorage`.
+
+### Tests
+
+- [x] Frontend unit: with no stored preference the provider renders Spanish and sets `lang="es"`; with `en` stored it renders English; the toggle writes the choice. Vitest 55/55.
+- [x] Backend unit: a created guest, a reused session and a rate-limited click produce one row each with the right outcome; `/api/stats` returns 401 without the secret, with a wrong one and when the secret is unset; the rows survive the cron cleanup. Backend 62/62.
+- [x] Playwright mocked E2E: a fresh browser sees `Probar la demo` and `lang="es"`, the toggle switches to `Try the demo` and `lang="en"`, a reload keeps English, and the demo still enters the board. 14/14.
+- [x] Integrated on Docker: 4/4 with the English preference injected; `/api/stats` with the local secret shows the run's guests, without it 401; the container serves `<html lang="es">`.
+- [ ] Full suites pass locally against SQLite, then on Docker, then on production after the deploy. Local and Docker done on 2026-09-19. Production pending the deploy.
+- [ ] Functional test (manual, by the user, production): open the site in a fresh browser and confirm it is in Spanish; switch to English, reload and confirm it stays; click `Try the demo` and read `/api/stats` with the secret to see the click counted.
+
+### Success criteria
+
+- [ ] A first-time visitor sees the app in Spanish, can switch to English in one tap and keeps that choice on reload.
+- [ ] Every click on `Try the demo` is counted with its outcome, readable by the operator only, with no personal data stored.
 
 ## Appendix: starting points for the tests
 

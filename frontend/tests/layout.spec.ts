@@ -5,6 +5,7 @@ import { initialData } from "@/lib/kanban";
 // Layout and accessibility checks for the Part 19 redesign, against the mocked API.
 
 const setupApiMock = async (page: Page) => {
+  await page.addInitScript(() => window.localStorage.setItem("pm-language", "en"));
   let authenticated = false;
   const board = structuredClone(initialData);
 

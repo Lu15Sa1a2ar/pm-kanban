@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Every entry shows the welcome panel once per tab; close it before touching the board.
 const enterAsGuest = async (page: Page) => {
+  await page.addInitScript(() => window.localStorage.setItem("pm-language", "en"));
   await page.goto("/");
   await page.getByRole("button", { name: "Try the demo" }).click();
   await page.getByRole("button", { name: "Start using the board" }).click();

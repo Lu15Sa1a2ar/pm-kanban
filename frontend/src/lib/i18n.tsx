@@ -1,8 +1,21 @@
 "use client";
 
-import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 
 export type Language = "en" | "es";
+
+// The app starts in Spanish; a choice made with the EN/ES toggle is kept per browser.
+export const DEFAULT_LANGUAGE: Language = "es";
+export const LANGUAGE_KEY = "pm-language";
+
+export const storedLanguage = (): Language | null => {
+  try {
+    const value = window.localStorage.getItem(LANGUAGE_KEY);
+    return value === "en" || value === "es" ? value : null;
+  } catch {
+    return null;
+  }
+};
 
 export const translations = {
   en: {
@@ -206,14 +219,35 @@ export const translate = (language: Language, key: TranslationKey, params?: Para
 
 type I18nContextValue = { language: Language; setLanguage: (language: Language) => void; t: Translate };
 const I18nContext = createContext<I18nContextValue | null>(null);
+// Fallback for components rendered outside the provider (unit tests).
+const fallbackLanguage = (typeof window !== "undefined" && storedLanguage()) || DEFAULT_LANGUAGE;
 const defaultI18n: I18nContextValue = {
-  language: "en",
+  language: fallbackLanguage,
   setLanguage: () => undefined,
-  t: (key, params) => translate("en", key, params),
+  t: (key, params) => translate(fallbackLanguage, key, params),
 };
 
 export const I18nProvider = ({ children }: { children: ReactNode }) => {
-  const [language, setLanguage] = useState<Language>("en");
+  // Start from the default on both server and client, then apply the stored choice
+  // after mount so the static export hydrates without a mismatch.
+  const [language, setLanguageState] = useState<Language>(DEFAULT_LANGUAGE);
+  useEffect(() => {
+    const stored = storedLanguage();
+    if (stored) {
+      setLanguageState(stored);
+    }
+  }, []);
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
+  const setLanguage = useCallback((next: Language) => {
+    setLanguageState(next);
+    try {
+      window.localStorage.setItem(LANGUAGE_KEY, next);
+    } catch {
+      // Storage blocked: the choice lasts for this page load only.
+    }
+  }, []);
   const t = useCallback<Translate>((key, params) => translate(language, key, params), [language]);
   return <I18nContext.Provider value={{ language, setLanguage, t }}>{children}</I18nContext.Provider>;
 };

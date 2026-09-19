@@ -139,6 +139,11 @@ class Database:
                     day TEXT PRIMARY KEY,
                     count INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TABLE IF NOT EXISTS demo_starts (
+                    id INTEGER PRIMARY KEY,
+                    created_at TEXT NOT NULL,
+                    outcome TEXT NOT NULL
+                );
                 """
             )
             session_columns = {row["name"] for row in connection.execute("PRAGMA table_info(sessions)")}
@@ -191,7 +196,9 @@ class Database:
                 "SELECT COUNT(*) FROM guest_signups WHERE ip = ?", (ip,)
             ).fetchone()[0]
             if signups >= rate_limit:
+                self._record_demo_start(connection, now.isoformat(), "rate_limited")
                 return None
+            self._record_demo_start(connection, now.isoformat(), "created")
             connection.execute(
                 "INSERT INTO guest_signups (ip, created_at) VALUES (?, ?)", (ip, now.isoformat())
             )
@@ -210,6 +217,40 @@ class Database:
                 (session_id, user_id, now.isoformat(), (now + lifetime).isoformat()),
             )
         return {"username": username, "session_id": session_id}
+
+    # Every click on "Try the demo" leaves one row: when, and what happened. No personal data.
+    @staticmethod
+    def _record_demo_start(connection: Any, now: str, outcome: str) -> None:
+        connection.execute("INSERT INTO demo_starts (created_at, outcome) VALUES (?, ?)", (now, outcome))
+
+    @retry_once_on_transient_error
+    def record_demo_start(self, outcome: str) -> None:
+        with self.connect() as connection:
+            self._record_demo_start(connection, utc_now(), outcome)
+
+    @retry_once_on_transient_error
+    def demo_stats(self, days: int = 30) -> dict[str, Any]:
+        """Total demo starts and a per-day breakdown by outcome for the last `days` days."""
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+        with self.connect() as connection:
+            total = int(connection.execute("SELECT COUNT(*) FROM demo_starts").fetchone()[0])
+            rows = connection.execute(
+                """
+                SELECT substr(created_at, 1, 10) AS day, outcome, COUNT(*) AS count
+                FROM demo_starts
+                WHERE created_at >= ?
+                GROUP BY day, outcome
+                ORDER BY day DESC
+                """,
+                (since,),
+            ).fetchall()
+        by_day: dict[str, dict[str, int]] = {}
+        for row in rows:
+            by_day.setdefault(row["day"], {})[row["outcome"]] = int(row["count"])
+        return {
+            "total": total,
+            "days": [{"day": day, **counts} for day, counts in by_day.items()],
+        }
 
     @retry_once_on_transient_error
     def count_signups(self, key: str) -> int:

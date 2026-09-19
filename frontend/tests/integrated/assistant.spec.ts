@@ -17,6 +17,7 @@ const ask = async (page: Page, question: string) => {
 
 test("the assistant answers, changes the board on request and ignores injected instructions", async ({ page }) => {
   test.setTimeout(6 * 60_000);
+  await page.addInitScript(() => window.localStorage.setItem("pm-language", "en"));
   await page.goto("/");
   await page.getByRole("button", { name: "Try the demo" }).click();
   await page.getByRole("button", { name: "Start using the board" }).click();
