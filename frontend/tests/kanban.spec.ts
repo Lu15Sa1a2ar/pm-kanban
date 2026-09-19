@@ -182,3 +182,26 @@ test("moves a card between columns", async ({ page }) => {
   await page.mouse.up();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
 });
+
+test("highlights the target column while dragging over one of its cards", async ({ page }) => {
+  await setupApiMock(page);
+  await page.goto("/");
+  await signIn(page);
+  const card = page.getByTestId("card-card-1");
+  const targetColumn = page.getByTestId("column-col-done");
+  const targetCard = page.getByTestId("card-card-7");
+  const cardBox = await card.boundingBox();
+  const targetBox = await targetCard.boundingBox();
+  if (!cardBox || !targetBox) {
+    throw new Error("Unable to resolve drag coordinates.");
+  }
+
+  await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 12 });
+  await expect(targetColumn).toHaveClass(/ring-2/);
+  await expect(page.getByTestId("column-col-backlog")).not.toHaveClass(/ring-2/);
+  await page.mouse.up();
+  await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+  await expect(targetColumn).not.toHaveClass(/ring-2/);
+});

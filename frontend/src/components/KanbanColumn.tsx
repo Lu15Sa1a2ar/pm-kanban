@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { useDroppable } from "@dnd-kit/core";
+import { useDndContext, useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import type { Card, Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
@@ -28,7 +28,11 @@ export const KanbanColumn = ({
   onTouchCard,
 }: KanbanColumnProps) => {
   const { t } = useI18n();
-  const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const { setNodeRef } = useDroppable({ id: column.id });
+  // Highlight the column whether the pointer is over the column itself or over
+  // one of its cards: dnd-kit reports the card as the target in the second case.
+  const { over } = useDndContext();
+  const isOver = over !== null && (over.id === column.id || column.cardIds.includes(String(over.id)));
 
   return (
     <section
