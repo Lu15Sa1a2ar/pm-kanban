@@ -459,3 +459,43 @@ def test_plain_text_completion_becomes_a_text_only_reply(monkeypatch: pytest.Mon
     assert client.get("/api/board").json() == before
     assert captured["provider"] == {"require_parameters": True, "ignore": ["DeepInfra"]}
     assert captured["reasoning"] == {"effort": "low"}
+
+
+def test_board_read_survives_one_dropped_turso_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Turso occasionally closes the connection without a response; the driver never retries."""
+    client = TestClient(app)
+    client.post("/api/auth/guest")
+    real_connect = type(database).connect
+    calls = {"count": 0}
+
+    def flaky_connect(self):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise turso_serverless.OperationalError(
+                "request to https://pm-prod.turso.io/v3/cursor failed: RemoteDisconnected('closed')"
+            )
+        return real_connect(self)
+
+    monkeypatch.setattr(type(database), "connect", flaky_connect)
+
+    response = client.get("/api/board")
+
+    assert response.status_code == 200
+    # get_session_user needed two attempts, get_board one.
+    assert calls["count"] == 3
+    assert "columns" in response.json()
+
+
+def test_sql_errors_from_turso_are_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TestClient(app, raise_server_exceptions=False)
+    client.post("/api/auth/guest")
+    calls = {"count": 0}
+
+    def failing_connect(self):
+        calls["count"] += 1
+        raise turso_serverless.OperationalError("SQLITE_ERROR: no such table: boards")
+
+    monkeypatch.setattr(type(database), "connect", failing_connect)
+
+    assert client.get("/api/board").status_code == 500
+    assert calls["count"] == 1

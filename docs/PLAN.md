@@ -521,7 +521,7 @@ The design is approved. This phase applies it to the existing components without
 - [x] Add `SiteFooter`: a white rounded panel at the bottom of the board page with four blocks, then a hairline and a bottom strip.
 - [x] Blocks: who built it with the LinkedIn and GitHub links, then frontend, backend, and data and copilot.
 - [x] Bottom strip: the demo-deletion note on the left, and the measured numbers on the right.
-- [x] Put the test count and the timing numbers in one exported constant so they are updated in one place. They came from the Part 14 and Part 15 runs and will drift. `lib/facts.ts` (name, links, 118 automated tests = 48 pytest + 53 Vitest + 12 mocked Playwright + 5 integrated Playwright, 290 ms, 1.9 s, 10 messages).
+- [x] Put the test count and the timing numbers in one exported constant so they are updated in one place. They came from the Part 14 and Part 15 runs and will drift. `lib/facts.ts` (name, links, 120 automated tests = 50 pytest + 53 Vitest + 12 mocked Playwright + 5 integrated Playwright, 290 ms, 1.9 s, 10 messages).
 - [x] Name and LinkedIn URL provided by the user on 2026-09-18: `Luis Salazar`, `https://www.linkedin.com/in/luis-alberto-salazar`. The footer uses these values (the mockup carried `[YOUR NAME]` and an empty profile link).
 
 **Copy**

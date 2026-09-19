@@ -1,6 +1,8 @@
+import functools
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import sqlite3
@@ -9,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 import turso_serverless
+
+logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_DATABASE_PATH = BASE_DIR / "data" / "project-management.db"
@@ -49,6 +53,39 @@ def verify_password(password: str, stored_hash: str) -> bool:
     return hmac.compare_digest(expected.hex(), digest_hex)
 
 
+def is_transient_turso_error(error: Exception) -> bool:
+    """A transport failure between the function and Turso, not a SQL error.
+
+    The driver never retries: a dropped connection or a 5xx from Turso surfaces as
+    `OperationalError("request to ... failed: ...")` / `("HTTP status 5xx ...")`.
+    """
+    message = str(error)
+    return isinstance(error, turso_serverless.OperationalError) and (
+        message.startswith("request to ") or message.startswith("HTTP status 5")
+    )
+
+
+def retry_once_on_transient_error(method):
+    """Re-run a Database method once when Turso drops the connection.
+
+    Every method does its whole work inside one `with connect()` block, i.e. one
+    transaction the server discards when the stream dies, so running the method
+    again from the start is safe.
+    """
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return method(self, *args, **kwargs)
+        except turso_serverless.OperationalError as error:
+            if not is_transient_turso_error(error):
+                raise
+            logger.warning("Turso request failed, retrying once: %s", method.__name__, exc_info=error)
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
 class Database:
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path or os.getenv("PM_DATABASE_PATH", DEFAULT_DATABASE_PATH))
@@ -66,6 +103,7 @@ class Database:
         connection.execute("PRAGMA foreign_keys = ON")
         return connection
 
+    @retry_once_on_transient_error
     def initialize(self, seed_user: bool = True) -> None:
         """Create tables and, outside production, the local `user`/`password` account."""
         with self.connect() as connection:
@@ -124,12 +162,14 @@ class Database:
                 (user_id, json.dumps(INITIAL_BOARD), utc_now()),
             )
 
+    @retry_once_on_transient_error
     def find_user(self, username: str) -> sqlite3.Row | None:
         with self.connect() as connection:
             return connection.execute(
                 "SELECT * FROM users WHERE username = ?", (username,)
             ).fetchone()
 
+    @retry_once_on_transient_error
     def create_guest(self, lifetime: timedelta, ip: str, rate_limit: int) -> dict[str, str] | None:
         """Create a guest user, its board, and its session in one transaction.
 
@@ -168,6 +208,7 @@ class Database:
             )
         return {"username": username, "session_id": session_id}
 
+    @retry_once_on_transient_error
     def delete_expired_guests(self) -> None:
         with self.connect() as connection:
             self._delete_expired_guests(connection, utc_now())
@@ -183,6 +224,7 @@ class Database:
             (now,),
         )
 
+    @retry_once_on_transient_error
     def create_session(self, user_id: int, lifetime: timedelta = timedelta(days=1)) -> str:
         session_id = secrets.token_urlsafe(32)
         now = datetime.now(timezone.utc)
@@ -194,6 +236,7 @@ class Database:
             )
         return session_id
 
+    @retry_once_on_transient_error
     def count_ai_message(self, session_id: str) -> tuple[int, int]:
         """Record one chat message; returns (messages in this session, messages today)."""
         day = datetime.now(timezone.utc).date().isoformat()
@@ -216,6 +259,7 @@ class Database:
             ).fetchone()["count"]
         return int(session_count), int(daily_count)
 
+    @retry_once_on_transient_error
     def get_session_user(self, session_id: str) -> sqlite3.Row | None:
         with self.connect() as connection:
             row = connection.execute(
@@ -228,10 +272,12 @@ class Database:
             ).fetchone()
             return row
 
+    @retry_once_on_transient_error
     def delete_session(self, session_id: str) -> None:
         with self.connect() as connection:
             connection.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
 
+    @retry_once_on_transient_error
     def get_board(self, user_id: int) -> dict[str, Any]:
         with self.connect() as connection:
             row = connection.execute(
@@ -241,6 +287,7 @@ class Database:
             raise LookupError("Board not found")
         return json.loads(row["data_json"])
 
+    @retry_once_on_transient_error
     def save_board(self, user_id: int, board: dict[str, Any]) -> None:
         with self.connect() as connection:
             connection.execute(

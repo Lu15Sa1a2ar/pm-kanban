@@ -6,7 +6,7 @@ export const facts = {
   authorName: "Luis Salazar",
   linkedinUrl: "https://www.linkedin.com/in/luis-alberto-salazar",
   sourceUrl: "https://github.com/Lu15Sa1a2ar/pm-kanban",
-  automatedTests: 118,
+  automatedTests: 120,
   boardLoad: "290 ms",
   coldStart: "1.9 s",
   // Mirrors the backend default for AI_MESSAGE_LIMIT.
