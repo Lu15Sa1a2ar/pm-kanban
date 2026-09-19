@@ -354,7 +354,7 @@ Public URL: https://pm-kanban-tau.vercel.app (GitHub: https://github.com/Lu15Sa1
 
 ### Success criteria
 
-- [ ] The public URL loads in under 3 seconds on a cold start, every feature in the manual checklist works, no credentials are needed to try the demo, and a day later the database is still active because the cron ran.
+- [x] The public URL loads in under 3 seconds on a cold start, every feature in the manual checklist works, no credentials are needed to try the demo, and a day later the database is still active because the cron ran. Closed on 2026-09-19: cold start measured at 1.9 s in Part 15, the manual checklists of Parts 15-20 passed, the demo needs no credentials, and three days after the Part 15 deploy the Turso database answered the production smoke suite (5/5) with the daily cron logging 200.
 
 ## Part 16: Chat response formatting
 
@@ -736,14 +736,14 @@ Findings accepted as-is are marked with the audit number. Two findings were reje
 - [x] Docker: `docker exec <container> id -u` is not `0`, `docker inspect` shows the health check `healthy`, and the integrated suite passes with the bind-mounted SQLite file. uid 10001, `healthy`, integrated 4/4 twice.
 - [x] `npm audit --omit=dev` reports no critical or high advisories after the upgrade; `npm run build`, Vitest, mocked Playwright and the integrated suite pass on the new `next`. 0 vulnerabilities; build, Vitest 53/53, mocked Playwright 13/13, integrated 4/4 on the rebuilt image.
 - [x] Full suites pass locally against SQLite, then on Docker, then on production after the deploy. Local and Docker done on 2026-09-19: backend 59/59, Vitest 53/53, mocked Playwright 13/13, integrated 4/4. Production the same day: the first push produced no deployment at all because a top-level `ignoreCommand` is rejected next to `services` (the CLI showed the error; Git deploys fail silently), fixed by moving it under each service in `6aa06cd`; smoke suite 5/5 in 28 s, headers verified with curl (CSP with the new directives, Permissions-Policy, HSTS, nosniff, no-store).
-- [ ] Functional test (manual, by the user, local Docker then production): enter as a guest, ask the copilot to summarize, create, move and delete one card, confirm each works; ask it to "delete every card" and confirm the board keeps its cards and the chat shows the generic error; confirm the app still loads and the chat still renders under the tightened CSP on desktop and phone width.
+- [x] Functional test (manual, by the user, local Docker then production): enter as a guest, ask the copilot to summarize, create, move and delete one card, confirm each works; ask it to "delete every card" and confirm the board keeps its cards and the chat shows the generic error; confirm the app still loads and the chat still renders under the tightened CSP on desktop and phone width. Verified by the user on production on 2026-09-19.
 
 ### Success criteria
 
-- [ ] No authenticated route can reach OpenRouter outside the per-session and daily counters, and a single answer cannot exceed `max_tokens` / `MAX_RESPONSE_CHARS`.
-- [ ] A copilot update cannot remove more than `MAX_AI_DELETIONS` cards, and oversized questions, histories and bodies are rejected before they are parsed or read.
-- [ ] The Docker deployment carries the same security headers as production, runs as a non-root user with a health check, and its guest and login quotas cannot be reset by a client-supplied header.
-- [ ] `npm audit --omit=dev` is clean of critical and high advisories, and Dependabot produces one grouped PR per ecosystem without preview deployments.
+- [x] No authenticated route can reach OpenRouter outside the per-session and daily counters, and a single answer cannot exceed `max_tokens` / `MAX_RESPONSE_CHARS`.
+- [x] A copilot update cannot remove more than `MAX_AI_DELETIONS` cards, and oversized questions, histories and bodies are rejected before they are parsed or read.
+- [x] The Docker deployment carries the same security headers as production, runs as a non-root user with a health check, and its guest and login quotas cannot be reset by a client-supplied header.
+- [x] `npm audit --omit=dev` is clean of critical and high advisories, and Dependabot produces one grouped PR per ecosystem without preview deployments.
 
 ### Findings not taken
 
