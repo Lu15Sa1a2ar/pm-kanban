@@ -118,9 +118,12 @@ export const KanbanCard = ({ card, marked = false, onDelete, onEdit, onTouch }: 
         <p
           onDoubleClick={() => setEditingField("details")}
           title={t("card.edit.hint")}
-          className="mt-1.5 cursor-text text-[12.5px] leading-[1.45] text-support"
+          className={clsx(
+            "mt-1.5 cursor-text text-[12.5px] leading-[1.45]",
+            card.details ? "text-support" : "italic text-muted"
+          )}
         >
-          {card.details}
+          {card.details || t("card.details.empty")}
         </p>
       )}
       <div className="mt-1.5 flex justify-end">

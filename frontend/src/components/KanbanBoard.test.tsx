@@ -94,3 +94,23 @@ describe("KanbanBoard", () => {
     expect(within(column).queryByText("New card")).not.toBeInTheDocument();
   });
 });
+
+describe("KanbanBoard cards without notes", () => {
+  it("offers an editable placeholder when a card has no details", async () => {
+    render(<KanbanBoard />);
+    const column = getFirstColumn();
+
+    // Empty the details first, as a copilot-created card would arrive.
+    await userEvent.dblClick(within(column).getByText("Draft quarterly themes with impact statements and metrics."));
+    await userEvent.clear(within(column).getByLabelText("Edit card details"));
+    await userEvent.tab();
+
+    const placeholder = within(column).getByText("Double-click to add notes");
+    await userEvent.dblClick(placeholder);
+    await userEvent.type(within(column).getByLabelText("Edit card details"), "Notes added later.");
+    await userEvent.tab();
+
+    expect(within(column).getByText("Notes added later.")).toBeInTheDocument();
+    expect(within(column).queryByText("Double-click to add notes")).not.toBeInTheDocument();
+  });
+});
