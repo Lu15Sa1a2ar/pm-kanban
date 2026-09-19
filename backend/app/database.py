@@ -101,6 +101,9 @@ class Database:
         connection = sqlite3.connect(self.path)
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
+        # No WAL: on the Docker Desktop bind mount SQLite silently stays in `delete` mode
+        # and the mode switch itself can block concurrent writers.
+        connection.execute("PRAGMA busy_timeout = 5000")
         return connection
 
     @retry_once_on_transient_error
@@ -207,6 +210,25 @@ class Database:
                 (session_id, user_id, now.isoformat(), (now + lifetime).isoformat()),
             )
         return {"username": username, "session_id": session_id}
+
+    @retry_once_on_transient_error
+    def count_signups(self, key: str) -> int:
+        """Entries for `key` (an IP, or `login:<ip>`) in the last hour, expiring older ones."""
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM guest_signups WHERE created_at <= ?",
+                ((datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(),),
+            )
+            return int(
+                connection.execute("SELECT COUNT(*) FROM guest_signups WHERE ip = ?", (key,)).fetchone()[0]
+            )
+
+    @retry_once_on_transient_error
+    def record_signup(self, key: str) -> None:
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO guest_signups (ip, created_at) VALUES (?, ?)", (key, utc_now())
+            )
 
     @retry_once_on_transient_error
     def delete_expired_guests(self) -> None:

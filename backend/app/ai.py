@@ -23,7 +23,8 @@ SYSTEM_PROMPT = (
     "exactly the same shape as the one you received: 'columns' (id, title, cardIds) and "
     "'cards' as a list of {id, title, details}. Keep every column id. When you create a "
     "card and the user gave no details, write one short sentence of details that fits the "
-    "title, in the language of the question; never leave 'details' empty."
+    "title, in the language of the question; never leave 'details' empty. Never delete a "
+    "card unless the question explicitly asks to delete or remove it."
 )
 
 
@@ -127,34 +128,6 @@ class AIRequestError(RuntimeError):
     pass
 
 
-def ask_openrouter(question: str) -> str:
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise AIConfigurationError("OPENROUTER_API_KEY is not configured")
-
-    try:
-        response = httpx.post(
-            OPENROUTER_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "messages": [{"role": "user", "content": question}],
-            },
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-    except (httpx.HTTPError, KeyError, IndexError, TypeError) as error:
-        raise AIRequestError("OpenRouter request failed") from error
-
-    if not isinstance(content, str) or not content.strip():
-        raise AIRequestError("OpenRouter returned an empty response")
-    return content
-
-
 def ask_openrouter_structured(
     question: str, board: dict[str, Any], history: list[dict[str, str]]
 ) -> dict[str, Any]:
@@ -184,6 +157,8 @@ def ask_openrouter_structured(
         # Short internal reasoning: faster, cheaper, and fewer empty completions from
         # providers that mishandle long reasoning output.
         "reasoning": {"effort": "low"},
+        # Bounds cost and answer size; the sidebar asks for short answers anyway.
+        "max_tokens": int(os.getenv("AI_MAX_TOKENS", "1200")),
         "response_format": {
             "type": "json_schema",
             "json_schema": {"name": "kanban_assistant", "strict": True, "schema": RESPONSE_SCHEMA},
@@ -191,14 +166,15 @@ def ask_openrouter_structured(
     }
     try:
         content = None
-        # The provider occasionally times out or returns an empty completion; one retry covers it.
-        for attempt in range(2):
+        # The provider occasionally times out or returns an empty completion; one retry covers
+        # it. The retry gets a shorter timeout so a request holds a worker for 90 s at most.
+        for attempt, timeout in enumerate((60.0, 30.0)):
             try:
                 response = httpx.post(
                     OPENROUTER_URL,
                     headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                     json=request,
-                    timeout=60.0,
+                    timeout=timeout,
                 )
             except httpx.TimeoutException:
                 if attempt:
@@ -214,5 +190,6 @@ def ask_openrouter_structured(
 
     if not isinstance(result, dict) or not isinstance(result.get("response"), str):
         raise AIRequestError("OpenRouter returned an invalid structured response")
+    result["response"] = _limit(result["response"], int(os.getenv("MAX_RESPONSE_CHARS", "4000")))
     result["board"] = board_from_model(result.get("board"))
     return result

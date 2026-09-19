@@ -41,25 +41,31 @@ class BoardData(BaseModel):
         return self
 
 
+# Hard caps enforced while parsing; `trim_conversation` in ai.py trims further
+# (MAX_MESSAGE_CHARS, MAX_HISTORY_TURNS) so a normal client is never rejected.
+MAX_CHAT_TEXT = 4000
+MAX_HISTORY_MESSAGES = 40
+
+
 class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    username: str = Field(min_length=1)
-    password: str = Field(min_length=1)
+    username: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=1, max_length=200)
 
 
 class ChatMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     role: Literal["user", "assistant"]
-    content: str
+    content: str = Field(max_length=MAX_CHAT_TEXT)
 
 
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    question: str = Field(min_length=1)
-    history: list[ChatMessage] = Field(default_factory=list)
+    question: str = Field(min_length=1, max_length=MAX_CHAT_TEXT)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=MAX_HISTORY_MESSAGES)
 
 
 class ChatResponse(BaseModel):

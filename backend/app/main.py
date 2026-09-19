@@ -5,14 +5,10 @@ from datetime import timedelta
 from pathlib import Path
 
 from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.ai import (
-    AIConfigurationError,
-    AIRequestError,
-    ask_openrouter,
-    ask_openrouter_structured,
-)
+from app.ai import AIConfigurationError, AIRequestError, ask_openrouter_structured
 from app.database import Database, verify_password
 from app.schemas import BoardData, ChatRequest, ChatResponse, LoginRequest
 
@@ -53,9 +49,37 @@ app = FastAPI(
 )
 
 
+# Same values as the `headers` block in vercel.json, so the Docker deployment matches
+# production. `script-src 'unsafe-inline'` is required by the Next.js static export.
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; "
+    "font-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; worker-src 'self'; "
+    "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+)
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
 @app.middleware("http")
-async def no_store_api_responses(request: Request, call_next):
+async def security_headers_and_same_site_writes(request: Request, call_next):
+    # Browsers send Sec-Fetch-Site on every request; a cross-site value on a write is a
+    # CSRF attempt that SameSite=Lax and the JSON body already stop. Made explicit here.
+    fetch_site = request.headers.get("sec-fetch-site")
+    if request.method not in SAFE_METHODS and fetch_site not in (None, "same-origin", "none"):
+        return Response("Cross-site request rejected", status_code=status.HTTP_403_FORBIDDEN)
+    # Oversized declared bodies are refused before a byte of them is read.
+    declared = request.headers.get("content-length", "")
+    if declared.isdigit() and int(declared) > env_int("MAX_BOARD_BYTES", 256 * 1024):
+        return JSONResponse({"detail": "Request is too large"}, status_code=status.HTTP_413_CONTENT_TOO_LARGE)
     response = await call_next(request)
+    response.headers.update(SECURITY_HEADERS)
+    if is_production():
+        response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains"
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "private, no-store"
     return response
@@ -86,13 +110,21 @@ def set_session_cookie(response: Response, session_id: str) -> None:
 
 
 def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for", "")
-    return forwarded.split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    """The per-IP quotas key on this. Only the proxy header Vercel sets is trusted: in
+    Docker the client talks to Uvicorn directly and could pick any X-Forwarded-For value."""
+    if os.getenv("VERCEL"):
+        forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
+    return request.client.host if request.client else "unknown"
 
 
-async def limit_board_size(request: Request) -> None:
+async def limit_body_size(request: Request) -> None:
+    """Chunked bodies carry no Content-Length, so they are measured after the read. Declared
+    lengths are rejected earlier, in the middleware: FastAPI reads the body before it
+    resolves dependencies, so a check here could never prevent the read."""
     if len(await request.body()) > env_int("MAX_BOARD_BYTES", 256 * 1024):
-        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Board is too large")
+        raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="Request is too large")
 
 
 def authenticated_user(session_id: str | None) -> dict[str, object]:
@@ -105,9 +137,14 @@ def authenticated_user(session_id: str | None) -> dict[str, object]:
 
 
 @app.post("/api/auth/login")
-def login(credentials: LoginRequest, response: Response) -> dict[str, str]:
+def login(credentials: LoginRequest, request: Request, response: Response) -> dict[str, str]:
+    # Failed attempts share the guest window: GUEST_RATE_LIMIT failures per IP per hour.
+    ip = client_ip(request)
+    if database.count_signups(f"login:{ip}") >= env_int("GUEST_RATE_LIMIT", 5):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many attempts, try later")
     user = database.find_user(credentials.username)
     if user is None or not verify_password(credentials.password, user["password_hash"]):
+        database.record_signup(f"login:{ip}")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     set_session_cookie(response, database.create_session(user["id"]))
     return {"username": user["username"]}
@@ -152,7 +189,7 @@ def read_board(session_id: str | None = Cookie(default=None, alias=SESSION_COOKI
     return database.get_board(int(user["id"]))
 
 
-@app.put("/api/board", response_model=BoardData, dependencies=[Depends(limit_board_size)])
+@app.put("/api/board", response_model=BoardData, dependencies=[Depends(limit_body_size)])
 def write_board(
     board: BoardData,
     session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE),
@@ -162,15 +199,6 @@ def write_board(
     return board
 
 
-@app.post("/api/ai/connectivity")
-def ai_connectivity(session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE)) -> dict[str, str]:
-    authenticated_user(session_id)
-    try:
-        return {"answer": ask_openrouter("What is 2+2? Reply with only the number.")}
-    except (AIConfigurationError, AIRequestError) as error:
-        raise ai_error(error) from error
-
-
 def ai_error(error: Exception) -> HTTPException:
     logger.warning("AI request failed", exc_info=error)
     if isinstance(error, AIConfigurationError):
@@ -178,7 +206,7 @@ def ai_error(error: Exception) -> HTTPException:
     return HTTPException(status_code=502, detail="AI assistant request failed")
 
 
-@app.post("/api/ai/chat", response_model=ChatResponse)
+@app.post("/api/ai/chat", response_model=ChatResponse, dependencies=[Depends(limit_body_size)])
 def ai_chat(
     request: ChatRequest,
     session_id: str | None = Cookie(default=None, alias=SESSION_COOKIE),
@@ -201,6 +229,11 @@ def ai_chat(
             # The model may rename columns and move cards, never add or remove columns.
             if [c.id for c in updated_board.columns] != [c["id"] for c in current_board["columns"]]:
                 raise ValueError("AI changed the column set")
+            # A wholesale rewrite that drops cards is more likely an injection or a model
+            # slip than a request; the prompt only allows deletions the question asked for.
+            removed = set(current_board["cards"]) - set(updated_board.cards)
+            if len(removed) > env_int("MAX_AI_DELETIONS", 3):
+                raise ValueError(f"AI removed {len(removed)} cards")
             database.save_board(int(user["id"]), updated_board.model_dump())
         return ChatResponse(response=result["response"], board=updated_board)
     except (AIConfigurationError, AIRequestError) as error:

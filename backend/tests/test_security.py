@@ -9,9 +9,11 @@ from app.main import app, database
 
 
 @pytest.fixture(autouse=True)
-def temporary_database(tmp_path):
+def temporary_database(tmp_path, monkeypatch):
     database.path = tmp_path / "test.db"
     database.initialize()
+    # These tests key quotas on X-Forwarded-For, which is only trusted behind Vercel.
+    monkeypatch.setenv("VERCEL", "1")
 
 
 def guest_client(ip: str = "203.0.113.1") -> TestClient:
@@ -245,7 +247,7 @@ def test_question_and_history_are_truncated_before_the_model_call(monkeypatch) -
     client = guest_client()
     history = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"turn {i}"} for i in range(40)]
 
-    response = client.post("/api/ai/chat", json={"question": "q" * 5000, "history": history})
+    response = client.post("/api/ai/chat", json={"question": "q" * 3000, "history": history})
 
     assert response.status_code == 200
     messages = captured["messages"]

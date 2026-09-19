@@ -87,45 +87,6 @@ def test_logout_invalidates_session() -> None:
     assert client.get("/api/board").status_code == 401
 
 
-def test_ai_connectivity_uses_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = TestClient(app)
-    client.post("/api/auth/login", json={"username": "user", "password": "password"})
-
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-
-    class FakeResponse:
-        def raise_for_status(self) -> None:
-            return None
-
-        def json(self) -> dict[str, object]:
-            return {"choices": [{"message": {"content": "4"}}]}
-
-    def fake_post(*args: object, **kwargs: object) -> FakeResponse:
-        assert args[0] == "https://openrouter.ai/api/v1/chat/completions"
-        assert kwargs["json"] == {
-            "model": "openai/gpt-oss-120b",
-            "messages": [{"role": "user", "content": "What is 2+2? Reply with only the number."}],
-        }
-        return FakeResponse()
-
-    monkeypatch.setattr("app.ai.httpx.post", fake_post)
-
-    response = client.post("/api/ai/connectivity")
-
-    assert response.status_code == 200
-    assert response.json() == {"answer": "4"}
-
-
-def test_ai_connectivity_requires_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = TestClient(app)
-    client.post("/api/auth/login", json={"username": "user", "password": "password"})
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-
-    response = client.post("/api/ai/connectivity")
-
-    assert response.status_code == 503
-
-
 def test_ai_chat_validates_and_persists_structured_board_update(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -114,6 +114,9 @@ test("api responses are never cached and production sends the security headers",
   const headers = page.headers();
   expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
   expect(headers["content-security-policy"]).toContain("connect-src 'self'");
+  expect(headers["content-security-policy"]).toContain("object-src 'none'");
+  expect(headers["content-security-policy"]).toContain("frame-src 'none'");
+  expect(headers["permissions-policy"]).toContain("camera=()");
   expect(headers["x-content-type-options"]).toBe("nosniff");
   expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
   expect(headers["strict-transport-security"]).toContain("max-age=");
