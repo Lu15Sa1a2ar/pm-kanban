@@ -685,6 +685,72 @@ The Spanish column names stay untranslated. `Backlog`, `Discovery`, `In Progress
 - Under `prefers-reduced-motion: reduce`, the marker appears and disappears without transition and the panel opens without animation.
 - Nothing in this phase changes an API route, the session model, or the structured-update contract. If a change looks like it needs one, stop and raise it instead.
 
+## Part 20: Audit follow-up before the public announcement
+
+A second, read-only security audit of the repository (2026-09-19) reported 15 findings. Each one was checked against the current code before being added here; the verdicts are recorded per item so the reasoning survives. Nothing in this phase changes the product: the entry screen, the board, the copilot contract and the guest flow stay exactly as Part 19 left them. The rule of the earlier hardening phases applies: every item ships with its test, local suites first, then Docker, then production.
+
+Findings accepted as-is are marked with the audit number. Two findings were rejected with a reason (see "Findings not taken"), and three were downgraded because an existing control already bounds them.
+
+### Checklist
+
+**AI spend and abuse**
+
+- [ ] (1) Remove `POST /api/ai/connectivity`. It calls OpenRouter for any authenticated session without touching `AI_MESSAGE_LIMIT` or `AI_DAILY_LIMIT`, and nothing in the frontend uses it since Part 10 (`grep connectivity frontend/src` is empty). Delete the route, its two tests and the mention in `CLAUDE.md`; the `2+2` check that Part 8 needed is covered by `tests/integrated/app.spec.ts`. Confirmed.
+- [ ] (11) Bound the model output: send `max_tokens` (default 1200, env `AI_MAX_TOKENS`) in the OpenRouter request and truncate `response` to `MAX_RESPONSE_CHARS` (default 4000) before it leaves the backend. Confirmed: `RESPONSE_SCHEMA` has no size limit and the request sets no `max_tokens`.
+- [ ] (9) Guard against silent card loss in a copilot update: reject an update that removes more than `MAX_AI_DELETIONS` cards (default 3) with the same 502 path as an invalid board, and add one sentence to the system prompt: never delete a card unless the question explicitly asks for it. Confirmed: the route checks the column set only; the model can return a board with any subset of the cards. Full-document contract (Part 18, decision 2A) stays.
+- [ ] (3) Accept the OpenRouter worst case as bounded and document it: a chat holds one worker for at most 2 x 60 s, but a visitor gets 5 sessions per hour per IP and the whole app 200 messages per day, and on Vercel each invocation is its own instance, so a process-wide semaphore would guard nothing. One cheap improvement: retry a timeout with a shorter second attempt (30 s) so the ceiling is 90 s, not 120 s. Downgraded.
+
+**Request limits**
+
+- [ ] (4) Put the limits in the schema, before parsing does the work: `ChatMessage.content` `max_length=4000`, `ChatRequest.question` `max_length=4000`, `ChatRequest.history` `max_length=40`. `trim_conversation` keeps trimming to `MAX_MESSAGE_CHARS` / `MAX_HISTORY_TURNS` inside those bounds, so a normal client is never rejected. Confirmed: `history` and `content` are unbounded today and the trim runs after FastAPI has parsed the whole body.
+- [ ] (5) Check `Content-Length` before reading: `limit_board_size` returns 413 from the header when it is present and over the cap, then reads and re-checks (chunked bodies). Apply the same dependency to `/api/ai/chat` with the same cap. Confirmed; on Vercel the platform already rejects bodies over 4.5 MB, so the residual risk is the Docker deployment.
+- [ ] (6) Rate-limit failed logins per IP with the guest window: reuse `guest_signups` with the key `login:<ip>` and `GUEST_RATE_LIMIT` attempts per hour, so no new table and no new cleanup. Downgraded: production has no login account (Part 17, decision 1A), `find_user` returns `None` and PBKDF2 never runs, so today this only protects local Docker.
+- [ ] (8) Trust `X-Forwarded-For` only behind the known proxy: when `VERCEL` is set read the first value (Vercel sets it), otherwise use `request.client.host`. Confirmed: in Docker any client can send the header and get a fresh guest quota per request.
+- [ ] (7) Add a same-site check for state-changing requests: a middleware that returns 403 when the method is not `GET`/`HEAD`/`OPTIONS` and `Sec-Fetch-Site` is present with a value other than `same-origin` or `none`. Downgraded: `SameSite=Lax`, JSON bodies and the absence of CORS already block cross-site writes; this makes the defense explicit at the cost of five lines.
+
+**Headers, CSP and container**
+
+- [ ] (12) Serve the security header set from FastAPI too (`X-Content-Type-Options`, `Referrer-Policy`, `Content-Security-Policy`, and `Strict-Transport-Security` only when `is_production()`), so the Docker image matches production. `vercel.json` stays the source of truth for the CDN-served frontend; identical values on `/api/` responses are harmless. Confirmed.
+- [ ] (13) Tighten the CSP in both places: add `object-src 'none'`, `frame-src 'none'`, `worker-src 'self'`, and a `Permissions-Policy` header (`camera=(), microphone=(), geolocation=()`). `script-src 'unsafe-inline'` stays: the Next.js static export ships inline bootstrap scripts with per-build hashes and no nonce is possible without a server. Confirmed as documented.
+- [ ] (14) Run the container as a non-root user: create `app` in the Dockerfile, `chown` `/app`, `USER app`, and add a `HEALTHCHECK` on `/api/health`. Verify the SQLite bind mount (`./backend/data`) is writable on Docker Desktop for Windows before checking this off. Confirmed.
+- [ ] Local SQLite only: `PRAGMA journal_mode=WAL` and `PRAGMA busy_timeout=5000` on connect. Not applicable to Turso.
+
+**Dependencies**
+
+- [ ] (2) Upgrade the audited frontend dependencies: `next` 16.1.6 -> 16.3.5 (one critical advisory, most of it in server features this app does not use: image optimization, server actions, middleware; the static export runs none of them, but the build does), and let `npm audit fix` take `postcss`, `nanoid` and `baseline-browser-mapping`. Run the full frontend suites and rebuild the Docker image before merging. Close or supersede the open Dependabot PRs this covers. Confirmed.
+- [ ] Group Dependabot updates (npm minor/patch in one PR, uv in another, actions in another) and skip Vercel preview deployments for `dependabot/*` branches (`ignoreCommand` in the project settings), so the next round is one PR per ecosystem and no preview per bump.
+
+### Tests
+
+- [ ] Backend unit: `POST /api/ai/connectivity` returns 404 (route removed).
+- [ ] Backend unit: the OpenRouter request carries `max_tokens`; a 10,000-character `response` from the model comes back truncated to `MAX_RESPONSE_CHARS`.
+- [ ] Backend unit: a model update that drops four of five cards is rejected with 502 and the board is unchanged; dropping one card is accepted; the system prompt contains the no-deletion rule.
+- [ ] Backend unit: a history of 41 messages, a 4,001-character question and a 4,001-character history message each return 422; 40 messages of 4,000 characters return 200 and reach the model trimmed to `MAX_HISTORY_TURNS` x `MAX_MESSAGE_CHARS`.
+- [ ] Backend unit: a `PUT /api/board` and a `POST /api/ai/chat` with `Content-Length` over the cap return 413 before the body is read (assert through a request whose body is a generator that raises if consumed).
+- [ ] Backend unit: the sixth failed login from one IP within an hour returns 429; a correct login on the fifth attempt still returns 200.
+- [ ] Backend unit: without `VERCEL`, `X-Forwarded-For` is ignored and two guests from the same client with different header values share one quota; with `VERCEL=1` the header is honoured.
+- [ ] Backend unit: a `POST /api/auth/guest` with `Sec-Fetch-Site: cross-site` returns 403; `same-origin`, `none` and a missing header pass; `GET /api/board` is never blocked by the check.
+- [ ] Backend unit: every response carries `X-Content-Type-Options`, `Referrer-Policy` and the CSP; HSTS appears only when `PRODUCTION=1`.
+- [ ] Backend unit: a second timeout aborts after the shorter retry (assert the two `timeout` values passed to `httpx.post`).
+- [ ] Playwright against production (`app.spec.ts` headers test): the CSP contains `object-src 'none'` and `frame-src 'none'`, and `Permissions-Policy` is present.
+- [ ] Docker: `docker exec <container> id -u` is not `0`, `docker inspect` shows the health check `healthy`, and the integrated suite passes with the bind-mounted SQLite file.
+- [ ] `npm audit --omit=dev` reports no critical or high advisories after the upgrade; `npm run build`, Vitest, mocked Playwright and the integrated suite pass on the new `next`.
+- [ ] Full suites pass locally against SQLite, then on Docker, then on production after the deploy.
+- [ ] Functional test (manual, by the user, local Docker then production): enter as a guest, ask the copilot to summarize, create, move and delete one card, confirm each works; ask it to "delete every card" and confirm the board keeps its cards and the chat shows the generic error; confirm the app still loads and the chat still renders under the tightened CSP on desktop and phone width.
+
+### Success criteria
+
+- [ ] No authenticated route can reach OpenRouter outside the per-session and daily counters, and a single answer cannot exceed `max_tokens` / `MAX_RESPONSE_CHARS`.
+- [ ] A copilot update cannot remove more than `MAX_AI_DELETIONS` cards, and oversized questions, histories and bodies are rejected before they are parsed or read.
+- [ ] The Docker deployment carries the same security headers as production, runs as a non-root user with a health check, and its guest and login quotas cannot be reset by a client-supplied header.
+- [ ] `npm audit --omit=dev` is clean of critical and high advisories, and Dependabot produces one grouped PR per ecosystem without preview deployments.
+
+### Findings not taken
+
+- (10) Client-supplied conversation history with `assistant` turns. Kept as decided in Part 18: the history is bounded and validated (roles, sizes) and can only influence the caller's own board, which the caller can already edit directly. Persisting it server-side would add one Turso write per chat message for no security gain.
+- (15) Indexes on `guest_signups(ip, created_at)` and `sessions(expires_at)`. The tables hold tens of rows (guests live one hour and are deleted on every signup and by the daily cron), and every `CREATE INDEX IF NOT EXISTS` in `init` is one more HTTPS round trip to Turso on every cold start. Revisit only if the guest table ever grows past a few thousand rows.
+- Audit suggestions skipped for the same reason: a process-wide OpenRouter semaphore (meaningless on a per-invocation runtime), a bundle analysis (the export is already static and small), and `env_int` range validation (the variables are set by the operator, not by users).
+
 ## Appendix: starting points for the tests
 
 These are templates. The imports, fixture names, and helper functions are guesses at the layout; adjust them to the real names in `backend/app/` and `frontend/` (for example, the backend fixture is `temporary_database` in `backend/tests/test_main.py`, the session column is `sessions.id`, cards live in `board["cards"]` keyed by id with `columns[].cardIds`, and the chat request field is `question`).
