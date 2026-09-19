@@ -490,7 +490,7 @@ The design is approved. This phase applies it to the existing components without
 
 - [x] Add `WelcomePanel`: a modal shown once per session, over the board, immediately after entering, for guests and for signed-in users alike. Rendered by `AuthGate` next to the board for guests and signed-in users.
 - [x] Content per Appendix C: heading, one lead line, three items (move a card, tell the copilot, reload), a primary `Start using the board` button and the source link.
-- [x] Gate it on `sessionStorage`, not `localStorage`, so a live demo always shows it on a fresh tab while a reload inside the same session does not. Key `pm-welcome-seen`.
+- [x] Gate it on `sessionStorage`, not `localStorage`, so a live demo always shows it on a fresh tab while a reload inside the same session does not. Key `pm-welcome-seen:<username>`, cleared on logout: the user's local test found that after logging out and entering again (a new guest or a new sign-in) in the same tab the panel never came back, so the flag is per user rather than per tab.
 - [x] Close on the button, on the close control, on Escape, and on a click on the backdrop.
 
 **Board header**
@@ -521,7 +521,7 @@ The design is approved. This phase applies it to the existing components without
 - [x] Add `SiteFooter`: a white rounded panel at the bottom of the board page with four blocks, then a hairline and a bottom strip.
 - [x] Blocks: who built it with the LinkedIn and GitHub links, then frontend, backend, and data and copilot.
 - [x] Bottom strip: the demo-deletion note on the left, and the measured numbers on the right.
-- [x] Put the test count and the timing numbers in one exported constant so they are updated in one place. They came from the Part 14 and Part 15 runs and will drift. `lib/facts.ts` (name, links, 114 automated tests = 48 pytest + 49 Vitest + 12 mocked Playwright + 5 integrated Playwright, 290 ms, 1.9 s, 10 messages).
+- [x] Put the test count and the timing numbers in one exported constant so they are updated in one place. They came from the Part 14 and Part 15 runs and will drift. `lib/facts.ts` (name, links, 117 automated tests = 48 pytest + 52 Vitest + 12 mocked Playwright + 5 integrated Playwright, 290 ms, 1.9 s, 10 messages).
 - [x] Name and LinkedIn URL provided by the user on 2026-09-18: `Luis Salazar`, `https://www.linkedin.com/in/luis-alberto-salazar`. The footer uses these values (the mockup carried `[YOUR NAME]` and an empty profile link).
 
 **Copy**
@@ -540,7 +540,7 @@ The design is approved. This phase applies it to the existing components without
 - [x] Playwright integrated E2E against local Docker: send an instruction that moves a card, and confirm the moved card carries the marker and that the board still matches after a reload. `tests/integrated/assistant.spec.ts` step 4 asserts `data-marked`, the chip, exactly one marked card and the summary strip; step 6 compares the Done column before and after the reload and checks that neither the marks nor the panel come back. 4/4 on Docker (+ the headers test skipped off-Vercel).
 - [x] Playwright at 390px: the columns scroll horizontally, the copilot sits below the board, and no element overflows the viewport width. `tests/layout.spec.ts`: also the stacked entry screen at 390px and the side-by-side layout at 1440px (copilot 340px wide, footer in the viewport).
 - [x] Axe or an equivalent check on the entry screen, the board and the open welcome panel: no contrast failures, every control reachable by keyboard, visible focus. `@axe-core/playwright` (wcag2a + wcag2aa) on the three states in `tests/layout.spec.ts`, plus a keyboard pass: focus trapped in the panel, Escape closes it, EN, ES and Log out reachable with a visible outline. Clean after the four token adjustments.
-- [ ] Full suites pass locally against SQLite, then on Docker, then on production after the deploy. Local and Docker done on 2026-09-18: backend 48/48, Vitest 49/49, mocked Playwright 12/12, integrated 4/4 on Docker (SQLite). Production pending the deploy.
+- [ ] Full suites pass locally against SQLite, then on Docker, then on production after the deploy. Local and Docker done on 2026-09-18: backend 48/48, Vitest 52/52, mocked Playwright 12/12, integrated 4/4 on Docker (SQLite). After the user's first local pass: busy states with a spinner on `Try the demo`, `Sign in` and `Log out`, a `Loading your board` screen while the session and the board load, and a pressed state (`active:scale-[0.98]`) on the primary buttons. Production pending the deploy.
 - [ ] Functional test (manual, by the user, local Docker then production): enter as a guest in English and in Spanish; confirm the welcome panel shows once; move a card and confirm it is marked and the mark fades; reload and confirm the board persists and the panel does not return; check the header and footer on a desktop window and on a phone-width window.
 
 ### Success criteria

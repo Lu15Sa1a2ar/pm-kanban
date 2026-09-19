@@ -146,4 +146,39 @@ describe("AuthGate entry screen", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByTestId("session-countdown")).toHaveTextContent("60 min left");
   });
+
+  it("shows the panel again after logging out and entering as a new guest in the same tab", async () => {
+    render(<AuthGate />);
+    await userEvent.click(await screen.findByRole("button", { name: "Try the demo" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Start using the board" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Log out" }));
+    vi.mocked(loginAsGuest).mockResolvedValue({ username: "guest-second" });
+    await userEvent.click(await screen.findByRole("button", { name: "Try the demo" }));
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("shows a busy state while the demo starts and while logging out", async () => {
+    let finishGuest: (value: { username: string }) => void = () => undefined;
+    vi.mocked(loginAsGuest).mockReturnValueOnce(new Promise((resolve) => (finishGuest = resolve)));
+    let finishLogout: (value?: void) => void = () => undefined;
+    vi.mocked(logout).mockReturnValueOnce(new Promise((resolve) => (finishLogout = resolve)));
+    render(<AuthGate />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Try the demo" }));
+    const starting = screen.getByRole("button", { name: "Starting the demo" });
+    expect(starting).toBeDisabled();
+    expect(starting).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled();
+
+    finishGuest({ username: "guest-abc" });
+    await userEvent.click(await screen.findByRole("button", { name: "Start using the board" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Log out" }));
+    expect(screen.getByRole("button", { name: "Signing out" })).toBeDisabled();
+    finishLogout();
+    expect(await screen.findByRole("button", { name: "Try the demo" })).toBeInTheDocument();
+  });
 });

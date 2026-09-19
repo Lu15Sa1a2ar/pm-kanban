@@ -114,7 +114,7 @@ export const AIChatSidebar = ({
           aria-label={t("copilot.label")}
         />
         <button
-          className="rounded-[10px] bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+          className="rounded-[10px] bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 active:scale-[0.98] active:brightness-95 disabled:opacity-50"
           disabled={isSending || !question.trim()}
           type="submit"
         >

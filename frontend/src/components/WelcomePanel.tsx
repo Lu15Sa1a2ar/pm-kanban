@@ -4,29 +4,38 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { facts } from "@/lib/facts";
 import { useI18n } from "@/lib/i18n";
 
-export const WELCOME_SEEN_KEY = "pm-welcome-seen";
+// sessionStorage, keyed by user: a fresh tab or a different user (a new guest, a
+// new sign-in) shows the panel; a reload of the same user in the same tab does not.
+export const welcomeSeenKey = (username: string) => `pm-welcome-seen:${username}`;
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input, textarea, select, [tabindex]:not([tabindex="-1"])';
 
-// sessionStorage: a fresh tab always shows the panel, a reload in the same tab does not.
-const hasSeenWelcome = () => {
+const hasSeenWelcome = (username: string) => {
   try {
-    return window.sessionStorage.getItem(WELCOME_SEEN_KEY) === "1";
+    return window.sessionStorage.getItem(welcomeSeenKey(username)) === "1";
   } catch {
     return false;
   }
 };
 
-const rememberWelcome = () => {
+const rememberWelcome = (username: string) => {
   try {
-    window.sessionStorage.setItem(WELCOME_SEEN_KEY, "1");
+    window.sessionStorage.setItem(welcomeSeenKey(username), "1");
   } catch {
     // Storage blocked: the panel simply shows again next time.
   }
 };
 
-export const WelcomePanel = () => {
-  const [isOpen, setIsOpen] = useState(() => !hasSeenWelcome());
+export const forgetWelcome = (username: string) => {
+  try {
+    window.sessionStorage.removeItem(welcomeSeenKey(username));
+  } catch {
+    // Nothing to forget.
+  }
+};
+
+export const WelcomePanel = ({ username }: { username: string }) => {
+  const [isOpen, setIsOpen] = useState(() => !hasSeenWelcome(username));
   const { t } = useI18n();
   const dialogRef = useRef<HTMLDivElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
@@ -43,7 +52,7 @@ export const WelcomePanel = () => {
   }, [isOpen]);
 
   const close = () => {
-    rememberWelcome();
+    rememberWelcome(username);
     setIsOpen(false);
   };
 
@@ -125,7 +134,7 @@ export const WelcomePanel = () => {
           <button
             type="button"
             onClick={close}
-            className="rounded-[10px] bg-primary px-5 py-3 text-[15px] font-semibold text-white transition hover:brightness-110"
+            className="rounded-[10px] bg-primary px-5 py-3 text-[15px] font-semibold text-white transition hover:brightness-110 active:scale-[0.98] active:brightness-95"
           >
             {t("welcome.start")}
           </button>

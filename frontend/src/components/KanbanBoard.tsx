@@ -17,6 +17,7 @@ import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { LanguageToggle } from "@/components/LanguageToggle";
 import { SiteFooter } from "@/components/SiteFooter";
+import { LoadingScreen, Spinner } from "@/components/Spinner";
 import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
 import { getBoard, saveBoard } from "@/lib/api";
 import { cardCountLabel, useI18n } from "@/lib/i18n";
@@ -38,6 +39,7 @@ export const KanbanBoard = ({
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(remote);
   const [saveError, setSaveError] = useState("");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [markedCardIds, setMarkedCardIds] = useState<ReadonlySet<string>>(() => new Set());
   const [now, setNow] = useState(() => Date.now());
   const { t } = useI18n();
@@ -216,10 +218,22 @@ export const KanbanBoard = ({
     persistBoard(nextBoard);
   };
 
+  const handleLogout = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+    setIsLoggingOut(true);
+    try {
+      await onLogout();
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
 
   if (isLoading) {
-    return <div className="min-h-screen bg-page" aria-busy="true" />;
+    return <LoadingScreen label={t("board.loading")} />;
   }
 
   return (
@@ -268,11 +282,14 @@ export const KanbanBoard = ({
             ) : null}
             <LanguageToggle />
             <button
-              className="rounded-lg border border-line-outline px-3.5 py-2 text-sm font-semibold text-heading transition hover:border-heading"
-              onClick={onLogout}
+              className="flex items-center gap-2 rounded-lg border border-line-outline px-3.5 py-2 text-sm font-semibold text-heading transition hover:border-heading active:scale-[0.98] active:bg-page disabled:cursor-progress disabled:opacity-70"
+              onClick={handleLogout}
               type="button"
+              disabled={isLoggingOut}
+              aria-busy={isLoggingOut}
             >
-              {t("board.logout")}
+              {isLoggingOut ? <Spinner /> : null}
+              {isLoggingOut ? t("board.logout.loading") : t("board.logout")}
             </button>
           </div>
         </div>

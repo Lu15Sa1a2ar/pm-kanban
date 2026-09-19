@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { LanguageToggle } from "@/components/LanguageToggle";
-import { WelcomePanel } from "@/components/WelcomePanel";
+import { LoadingScreen, Spinner } from "@/components/Spinner";
+import { WelcomePanel, forgetWelcome } from "@/components/WelcomePanel";
 import { getCurrentUser, login, loginAsGuest, logout } from "@/lib/api";
 import { facts } from "@/lib/facts";
 import { useI18n } from "@/lib/i18n";
@@ -39,58 +40,87 @@ const rememberGuestStart = (username: string) => {
 const expiryFor = (username: string, startedAt: number | null) =>
   username.startsWith("guest-") && startedAt ? startedAt + GUEST_SESSION_MS : undefined;
 
-type Session = { status: "loading" } | { status: "signed-out" } | { status: "signed-in"; expiresAt?: number };
+type Session =
+  | { status: "loading" }
+  | { status: "signed-out" }
+  | { status: "signed-in"; username: string; expiresAt?: number };
+
+const PRESSABLE = "transition active:scale-[0.98] active:brightness-95 disabled:cursor-progress disabled:opacity-70";
 
 export const AuthGate = () => {
   const [session, setSession] = useState<Session>({ status: "loading" });
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [pending, setPending] = useState<"demo" | "login" | null>(null);
   const { t } = useI18n();
 
   useEffect(() => {
     getCurrentUser()
       .then((user) =>
-        setSession({ status: "signed-in", expiresAt: expiryFor(user.username, readGuestStart(user.username)) })
+        setSession({
+          status: "signed-in",
+          username: user.username,
+          expiresAt: expiryFor(user.username, readGuestStart(user.username)),
+        })
       )
       .catch(() => setSession({ status: "signed-out" }));
   }, []);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (pending) {
+      return;
+    }
+    setPending("login");
     try {
-      await login(username, password);
+      const user = await login(username, password);
       setError("");
-      setSession({ status: "signed-in" });
+      setSession({ status: "signed-in", username: user.username });
     } catch {
       setError(t("entry.invalid"));
+    } finally {
+      setPending(null);
     }
   };
 
   const handleGuest = async () => {
+    if (pending) {
+      return;
+    }
+    setPending("demo");
     try {
       const guest = await loginAsGuest();
       setError("");
-      setSession({ status: "signed-in", expiresAt: expiryFor(guest.username, rememberGuestStart(guest.username)) });
+      setSession({
+        status: "signed-in",
+        username: guest.username,
+        expiresAt: expiryFor(guest.username, rememberGuestStart(guest.username)),
+      });
     } catch {
       setError(t("entry.demo.error"));
+    } finally {
+      setPending(null);
     }
   };
 
   const handleLogout = async () => {
+    if (session.status === "signed-in") {
+      forgetWelcome(session.username);
+    }
     await logout();
     setSession({ status: "signed-out" });
   };
 
   if (session.status === "loading") {
-    return <div className="min-h-screen bg-page" aria-busy="true" />;
+    return <LoadingScreen label={t("board.loading")} />;
   }
 
   if (session.status === "signed-in") {
     return (
       <>
         <KanbanBoard onLogout={handleLogout} remote sessionExpiresAt={session.expiresAt} />
-        <WelcomePanel />
+        <WelcomePanel username={session.username} />
       </>
     );
   }
@@ -160,11 +190,14 @@ export const AuthGate = () => {
           <LanguageToggle />
         </div>
         <button
-          className="mt-6 w-full rounded-[11px] bg-primary px-4 py-3.5 text-[15px] font-semibold text-white transition hover:brightness-110"
+          className={`mt-6 flex w-full items-center justify-center gap-2.5 rounded-[11px] bg-primary px-4 py-3.5 text-[15px] font-semibold text-white hover:brightness-110 ${PRESSABLE}`}
           type="button"
           onClick={handleGuest}
+          disabled={pending !== null}
+          aria-busy={pending === "demo"}
         >
-          {t("entry.demo.button")}
+          {pending === "demo" ? <Spinner /> : null}
+          {pending === "demo" ? t("entry.demo.loading") : t("entry.demo.button")}
         </button>
         <p className="mt-3 text-[13px] leading-5 text-support">{t("entry.demo.note")}</p>
         <div className="mt-6 flex items-center gap-3" aria-hidden="true">
@@ -206,10 +239,13 @@ export const AuthGate = () => {
             </p>
           ) : null}
           <button
-            className="w-full rounded-[11px] border border-line-outline bg-panel px-4 py-3 text-[15px] font-semibold text-heading transition hover:border-heading"
+            className={`flex w-full items-center justify-center gap-2.5 rounded-[11px] border border-line-outline bg-panel px-4 py-3 text-[15px] font-semibold text-heading hover:border-heading active:bg-page ${PRESSABLE}`}
             type="submit"
+            disabled={pending !== null}
+            aria-busy={pending === "login"}
           >
-            {t("entry.signin")}
+            {pending === "login" ? <Spinner /> : null}
+            {pending === "login" ? t("entry.signin.loading") : t("entry.signin")}
           </button>
         </form>
       </section>

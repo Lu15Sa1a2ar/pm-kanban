@@ -3,6 +3,7 @@ import { initialData } from "@/lib/kanban";
 
 const setupApiMock = async (page: Page) => {
   let authenticated = false;
+  let username = "user";
   let board = structuredClone(initialData);
 
   await page.route("**/api/me", async (route) => {
@@ -10,7 +11,7 @@ const setupApiMock = async (page: Page) => {
       await route.fulfill({ status: 401, body: JSON.stringify({ detail: "Not authenticated" }) });
       return;
     }
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username: "user" }) });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username }) });
   });
 
   await page.route("**/api/auth/login", async (route) => {
@@ -20,12 +21,14 @@ const setupApiMock = async (page: Page) => {
       return;
     }
     authenticated = true;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username: "user" }) });
+    username = "user";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username }) });
   });
 
   await page.route("**/api/auth/guest", async (route) => {
     authenticated = true;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username: "guest-e2e" }) });
+    username = "guest-e2e";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ username }) });
   });
 
   await page.route("**/api/auth/logout", async (route) => {

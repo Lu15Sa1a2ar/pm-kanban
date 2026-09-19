@@ -47,7 +47,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
           <div className="flex items-center gap-2">
             <button
               type="submit"
-              className="rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-white transition hover:brightness-110"
+              className="rounded-lg bg-primary px-3.5 py-2 text-xs font-semibold text-white transition hover:brightness-110 active:scale-[0.98] active:brightness-95"
             >
               {t("board.add")}
             </button>
