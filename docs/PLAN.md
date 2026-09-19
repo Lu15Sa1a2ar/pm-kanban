@@ -769,7 +769,7 @@ Two requests from the user after the Part 20 close-out (2026-09-19): the app sho
 - [x] Backend unit: a created guest, a reused session and a rate-limited click produce one row each with the right outcome; `/api/stats` returns 401 without the secret, with a wrong one and when the secret is unset; the rows survive the cron cleanup. Backend 62/62.
 - [x] Playwright mocked E2E: a fresh browser sees `Probar la demo` and `lang="es"`, the toggle switches to `Try the demo` and `lang="en"`, a reload keeps English, and the demo still enters the board. 14/14.
 - [x] Integrated on Docker: 4/4 with the English preference injected; `/api/stats` with the local secret shows the run's guests, without it 401; the container serves `<html lang="es">`.
-- [ ] Full suites pass locally against SQLite, then on Docker, then on production after the deploy. Local and Docker done on 2026-09-19. Production pending the deploy.
+- [x] Full suites pass locally against SQLite, then on Docker, then on production after the deploy. Local and Docker done on 2026-09-19; production the same day (`25295f2`): smoke 5/5 in 47 s, `<html lang="es">` served, `/api/stats` answers 401 without the secret.
 - [ ] Functional test (manual, by the user, production): open the site in a fresh browser and confirm it is in Spanish; switch to English, reload and confirm it stays; click `Try the demo` and read `/api/stats` with the secret to see the click counted.
 
 ### Success criteria
