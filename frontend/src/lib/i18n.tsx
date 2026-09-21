@@ -34,6 +34,8 @@ export const translations = {
     "entry.try3": "Everything you change is saved, so a reload brings your board back.",
     "entry.stack": "Next.js and FastAPI, SQLite and Turso, OpenRouter for the copilot.",
     "entry.source": "Read the source",
+    "entry.builtby": "Built by {name}",
+    "entry.linkedin": "LinkedIn",
     "entry.card.title": "Start in one tap",
     "entry.demo.button": "Try the demo",
     "entry.demo.note":
@@ -127,6 +129,8 @@ export const translations = {
     "entry.try3": "Todo lo que cambiás se guarda, así que al recargar tu tablero vuelve.",
     "entry.stack": "Next.js y FastAPI, SQLite y Turso, OpenRouter para el copiloto.",
     "entry.source": "Ver el código",
+    "entry.builtby": "Hecho por {name}",
+    "entry.linkedin": "LinkedIn",
     "entry.card.title": "Entrá en un toque",
     "entry.demo.button": "Probar la demo",
     "entry.demo.note":

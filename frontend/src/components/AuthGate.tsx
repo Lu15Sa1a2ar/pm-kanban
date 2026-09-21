@@ -179,6 +179,17 @@ export const AuthGate = () => {
             {t("entry.source")}
           </a>
         </p>
+        <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+          <span>{t("entry.builtby", { name: facts.authorName })}</span>
+          <a
+            className="font-semibold text-link underline-offset-4 hover:underline"
+            href={facts.linkedinUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {t("entry.linkedin")}
+          </a>
+        </p>
       </section>
 
       <section
