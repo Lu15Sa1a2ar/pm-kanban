@@ -104,9 +104,10 @@ describe("AuthGate entry screen", () => {
 
     const content = await screen.findByTestId("entry-content");
     expect(within(content).getByRole("heading", { name: "Kanban Studio" })).toBeInTheDocument();
-    expect(within(content).getByRole("link", { name: "Read the source" })).toHaveAttribute(
+    expect(within(content).queryByRole("link", { name: "Read the source" })).not.toBeInTheDocument();
+    expect(within(content).getByRole("link", { name: "LinkedIn" })).toHaveAttribute(
       "href",
-      expect.stringContaining("github.com")
+      expect.stringContaining("linkedin.com")
     );
 
     const access = screen.getByTestId("entry-access");
